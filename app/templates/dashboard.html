@@ -33,7 +33,7 @@
                 {% endif %}
             </div>
             <div class="card-footer text-center">
-                <a href="/zookeeper/" class="btn btn-sm btn-outline-primary">查看详情</a>
+                <a href="{{ root_path }}/zookeeper/" class="btn btn-sm btn-outline-primary">查看详情</a>
             </div>
         </div>
     </div>
@@ -57,7 +57,7 @@
                 {% endif %}
             </div>
             <div class="card-footer text-center">
-                <a href="/kafka/" class="btn btn-sm btn-outline-primary">查看详情</a>
+                <a href="{{ root_path }}/kafka/" class="btn btn-sm btn-outline-primary">查看详情</a>
             </div>
         </div>
     </div>
@@ -87,7 +87,7 @@
                 {% endif %}
             </div>
             <div class="card-footer text-center">
-                <a href="/elasticsearch/" class="btn btn-sm btn-outline-primary">查看详情</a>
+                <a href="{{ root_path }}/elasticsearch/" class="btn btn-sm btn-outline-primary">查看详情</a>
             </div>
         </div>
     </div>
@@ -101,7 +101,7 @@ let refreshInterval = {{ refresh_interval }};
 let refreshTimer = setInterval(refreshDashboard, refreshInterval * 1000);
 
 function refreshDashboard() {
-    fetch('/api/dashboard/status')
+    fetch(BASE_URL + '/api/dashboard/status')
         .then(r => r.json())
         .then(data => {
             updateCard('zookeeper', data.zookeeper);

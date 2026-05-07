@@ -49,14 +49,23 @@ pip install -r requirements.txt
 
 ### 3. 启动服务
 
+**直接访问模式：**
 ```bash
 cd D:/dev-projects/projects/infra-monitor
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
+**Nginx 反向代理模式（路径前缀 `/infra-monitor/`）：**
+```bash
+cd D:/dev-projects/projects/infra-monitor
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --root-path /infra-monitor
+```
+> `--root-path /infra-monitor` 让 FastAPI 知道自己部署在 `/infra-monitor/` 路径下，所有模板链接和静态文件路径会自动添加前缀。
+
 ### 4. 访问
 
-打开浏览器访问：http://localhost:8000
+- 直接访问：http://localhost:8000
+- Nginx 代理：http://yourserver/infra-monitor/
 
 ## 项目结构
 

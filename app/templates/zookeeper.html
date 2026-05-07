@@ -112,7 +112,7 @@ function loadNode(path) {
     document.getElementById('node-path-input').value = path;
 
     // 加载子节点
-    fetch(`/zookeeper/api/children?path=${encodeURIComponent(path)}`)
+    fetch(BASE_URL + `/zookeeper/api/children?path=${encodeURIComponent(path)}`)
         .then(r => r.json())
         .then(data => {
             const list = document.getElementById('children-list');
@@ -138,7 +138,7 @@ function loadNode(path) {
         });
 
     // 加载节点详情
-    fetch(`/zookeeper/api/node?path=${encodeURIComponent(path)}`)
+    fetch(BASE_URL + `/zookeeper/api/node?path=${encodeURIComponent(path)}`)
         .then(r => {
             if (!r.ok) return r.json().then(d => Promise.reject(d.error));
             return r.json();
