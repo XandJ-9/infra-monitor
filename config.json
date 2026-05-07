@@ -1,0 +1,11 @@
+{
+  "zookeeper": {
+    "hosts": "127.0.0.1:2181",
+    "timeout": 10
+  },
+  "elasticsearch": {
+    "url": "http://127.0.0.1:9200",
+    "timeout": 10
+  },
+  "refresh_interval": 30
+}

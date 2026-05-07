@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}ZooKeeper 监控 - Infra Monitor{% endblock %}
+
+{% block content %}
+<h4 class="mb-3"><i class="bi bi-tree"></i> ZooKeeper 监控</h4>
+
+<!-- 状态概览 -->
+<div class="row g-3 mb-3">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">连接状态</div>
+            <div class="card-body">
+                {% if status.connected %}
+                    <span class="badge bg-success fs-6">已连接</span>
+                    <p class="mt-2 mb-1"><strong>集群：</strong>{{ status.cluster or '已连接' }}</p>
+                    <p class="mb-1"><strong>版本：</strong>{{ status.version or '-' }}</p>
+                {% else %}
+                    <span class="badge bg-danger fs-6">未连接</span>
+                    <p class="mt-2 text-danger">{{ status.error or '无法连接' }}</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">关键 Znode 监控</div>
+            <div class="card-body">
+                {% for node in key_nodes %}
+                <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                    <code>{{ node.path }}</code>
+                    {% if node.exists %}
+                        <span class="badge bg-success">存在</span>
+                    {% else %}
+                        <span class="badge bg-secondary">不存在</span>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 集群节点 -->
+{% if servers %}
+<div class="card mb-3">
+    <div class="card-header">集群节点</div>
+    <div class="card-body p-0">
+        <table class="table table-sm mb-0">
+            <thead><tr><th>Host</th><th>Port</th><th>角色</th></tr></thead>
+            <tbody>
+                {% for s in servers %}
+                <tr>
+                    <td>{{ s.host }}</td>
+                    <td>{{ s.port }}</td>
+                    <td>
+                        {% if s.role %}
+                            <span class="badge bg-info">{{ s.role }}</span>
+                        {% else %}
+                            <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- 节点树浏览器 -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>节点树浏览器</span>
+        <div class="input-group" style="max-width: 400px;">
+            <input type="text" class="form-control form-control-sm" id="node-path-input" value="/" placeholder="输入路径，如 /brokers/ids">
+            <button class="btn btn-sm btn-outline-primary" onclick="loadNode()">
+                <i class="bi bi-search"></i> 查询
+            </button>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <!-- 左侧：子节点列表 -->
+            <div class="col-md-4">
+                <h6>子节点</h6>
+                <div id="children-list" class="border rounded p-2" style="min-height: 300px; max-height: 500px; overflow-y: auto;">
+                    <p class="text-muted">点击查询加载节点信息</p>
+                </div>
+            </div>
+            <!-- 右侧：节点详情 -->
+            <div class="col-md-8">
+                <h6>节点详情</h6>
+                <div id="node-detail" class="border rounded p-3" style="min-height: 300px;">
+                    <p class="text-muted">选择一个节点查看详情</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 加载节点信息
+function loadNode(path) {
+    if (!path) {
+        path = document.getElementById('node-path-input').value.trim();
+    }
+    if (!path) path = '/';
+
+    // 更新输入框
+    document.getElementById('node-path-input').value = path;
+
+    // 加载子节点
+    fetch(`/zookeeper/api/children?path=${encodeURIComponent(path)}`)
+        .then(r => r.json())
+        .then(data => {
+            const list = document.getElementById('children-list');
+            list.innerHTML = '';
+            if (data.children && data.children.length > 0) {
+                // 上一级
+                if (path !== '/') {
+                    const parent = path.substring(0, path.lastIndexOf('/')) || '/';
+                    list.innerHTML += `<a href="javascript:void(0)" class="d-block py-1 text-muted" onclick="loadNode('${parent}')">
+                        <i class="bi bi-arrow-up"></i> ..</a>`;
+                }
+                data.children.forEach(child => {
+                    const childPath = path === '/' ? '/' + child : path + '/' + child;
+                    list.innerHTML += `<a href="javascript:void(0)" class="d-block py-1 node-link" onclick="loadNode('${childPath}')">
+                        <i class="bi bi-folder2"></i> ${child}</a>`;
+                });
+            } else {
+                list.innerHTML = '<p class="text-muted">无子节点</p>';
+            }
+        })
+        .catch(err => {
+            document.getElementById('children-list').innerHTML = `<p class="text-danger">加载失败: ${err}</p>`;
+        });
+
+    // 加载节点详情
+    fetch(`/zookeeper/api/node?path=${encodeURIComponent(path)}`)
+        .then(r => {
+            if (!r.ok) return r.json().then(d => Promise.reject(d.error));
+            return r.json();
+        })
+        .then(data => {
+            const detail = document.getElementById('node-detail');
+            let html = `<table class="table table-sm table-borderless mb-0">
+                <tr><th style="width:120px">路径</th><td><code>${data.path}</code></td></tr>
+                <tr><th>版本</th><td>${data.version}</td></tr>
+                <tr><th>子节点数</th><td>${data.num_children}</td></tr>
+                <tr><th>cZxid</th><td>${data.czxid}</td></tr>
+                <tr><th>mZxid</th><td>${data.mzxid}</td></tr>
+                <tr><th>创建时间</th><td>${new Date(data.ctime).toLocaleString()}</td></tr>
+                <tr><th>修改时间</th><td>${new Date(data.mtime).toLocaleString()}</td></tr>
+            </table>`;
+
+            if (data.value) {
+                html += `<hr><h6>数据</h6><pre class="bg-light p-2 rounded" style="max-height:200px;overflow:auto">${escapeHtml(data.value)}</pre>`;
+            }
+            detail.innerHTML = html;
+        })
+        .catch(err => {
+            document.getElementById('node-detail').innerHTML = `<p class="text-danger">${err}</p>`;
+        });
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// 页面加载时自动查询根节点
+document.addEventListener('DOMContentLoaded', () => loadNode('/'));
+</script>
+{% endblock %}

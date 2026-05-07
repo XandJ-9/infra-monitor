@@ -1,0 +1,104 @@
+/* Infra Monitor 自定义样式 */
+
+:root {
+    --zk-color: #28a745;
+    --kafka-color: #fd7e14;
+    --es-color: #6f42c1;
+}
+
+body {
+    background-color: #f5f6fa;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* 导航栏品牌 */
+.navbar-brand {
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+/* 组件卡片 */
+.component-card {
+    border: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.component-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+/* 状态指示灯 */
+.status-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.status-ok {
+    background-color: #28a745;
+    box-shadow: 0 0 6px rgba(40, 167, 69, 0.5);
+}
+
+.status-error {
+    background-color: #dc3545;
+    box-shadow: 0 0 6px rgba(220, 53, 69, 0.5);
+}
+
+/* ZK 节点链接 */
+.node-link {
+    color: #0d6efd;
+    text-decoration: none;
+    padding-left: 8px;
+    border-left: 2px solid transparent;
+    transition: all 0.15s;
+}
+
+.node-link:hover {
+    background-color: #e9ecef;
+    border-left-color: #0d6efd;
+    color: #0a58ca;
+}
+
+/* 卡片样式统一 */
+.card {
+    border: none;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+.card-header {
+    background-color: #fff;
+    border-bottom: 2px solid #e9ecef;
+    font-weight: 600;
+}
+
+/* 表格优化 */
+.table-sm th {
+    font-weight: 600;
+    color: #495057;
+    border-bottom-width: 2px;
+}
+
+.table-hover tbody tr:hover {
+    background-color: rgba(13, 110, 253, 0.04);
+}
+
+/* 代码标签 */
+code {
+    color: #d63384;
+    font-size: 0.9em;
+}
+
+/* 进度条文字 */
+.progress {
+    font-size: 0.75rem;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+    .component-card {
+        margin-bottom: 12px;
+    }
+}

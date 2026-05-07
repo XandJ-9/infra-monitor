@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}仪表盘 - Infra Monitor{% endblock %}
+
+{% block content %}
+<h4 class="mb-3">基础设施监控仪表盘</h4>
+
+<!-- 自动刷新提示 -->
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <span class="text-muted">自动刷新间隔：{{ refresh_interval }}s</span>
+    <button class="btn btn-sm btn-outline-primary" onclick="refreshDashboard()">
+        <i class="bi bi-arrow-clockwise"></i> 立即刷新
+    </button>
+</div>
+
+<!-- 组件卡片 -->
+<div class="row g-3" id="dashboard-cards">
+    <!-- ZooKeeper 卡片 -->
+    <div class="col-md-4">
+        <div class="card component-card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-tree"></i> ZooKeeper</span>
+                <span class="status-dot {% if zk_status.connected %}status-ok{% else %}status-error{% endif %}"></span>
+            </div>
+            <div class="card-body">
+                {% if zk_status.connected %}
+                    <p class="mb-1"><strong>集群：</strong>{{ zk_status.cluster or '已连接' }}</p>
+                    <p class="mb-1"><strong>版本：</strong>{{ zk_status.version or '-' }}</p>
+                    {% for key, val in zk_status.metrics.items() %}
+                    <p class="mb-1 small text-muted">{{ key }}: {{ val }}</p>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-danger">{{ zk_status.error or '未连接' }}</p>
+                {% endif %}
+            </div>
+            <div class="card-footer text-center">
+                <a href="/zookeeper/" class="btn btn-sm btn-outline-primary">查看详情</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Kafka 卡片 -->
+    <div class="col-md-4">
+        <div class="card component-card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-lightning"></i> Kafka</span>
+                <span class="status-dot {% if kafka_status.connected %}status-ok{% else %}status-error{% endif %}"></span>
+            </div>
+            <div class="card-body">
+                {% if kafka_status.connected %}
+                    <p class="mb-1"><strong>集群：</strong>{{ kafka_status.cluster or '已连接' }}</p>
+                    <p class="mb-1"><strong>版本：</strong>{{ kafka_status.version or '-' }}</p>
+                    {% for key, val in kafka_status.metrics.items() %}
+                    <p class="mb-1 small text-muted">{{ key }}: {{ val }}</p>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-danger">{{ kafka_status.error or '未连接' }}</p>
+                {% endif %}
+            </div>
+            <div class="card-footer text-center">
+                <a href="/kafka/" class="btn btn-sm btn-outline-primary">查看详情</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Elasticsearch 卡片 -->
+    <div class="col-md-4">
+        <div class="card component-card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-search"></i> Elasticsearch</span>
+                <span class="status-dot {% if es_status.connected %}status-ok{% else %}status-error{% endif %}"></span>
+            </div>
+            <div class="card-body">
+                {% if es_status.connected %}
+                    <p class="mb-1"><strong>集群：</strong>{{ es_status.cluster or '已连接' }}</p>
+                    <p class="mb-1"><strong>版本：</strong>{{ es_status.version or '-' }}</p>
+                    {% for key, val in es_status.metrics.items() %}
+                    <p class="mb-1 small text-muted">
+                        {% if key == 'status' %}
+                            <span class="badge bg-{{ 'success' if val == 'green' else 'warning' if val == 'yellow' else 'danger' }}">{{ val }}</span>
+                        {% else %}
+                            {{ key }}: {{ val }}
+                        {% endif %}
+                    </p>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-danger">{{ es_status.error or '未连接' }}</p>
+                {% endif %}
+            </div>
+            <div class="card-footer text-center">
+                <a href="/elasticsearch/" class="btn btn-sm btn-outline-primary">查看详情</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 自动刷新
+let refreshInterval = {{ refresh_interval }};
+let refreshTimer = setInterval(refreshDashboard, refreshInterval * 1000);
+
+function refreshDashboard() {
+    fetch('/api/dashboard/status')
+        .then(r => r.json())
+        .then(data => {
+            updateCard('zookeeper', data.zookeeper);
+            updateCard('kafka', data.kafka);
+            updateCard('elasticsearch', data.elasticsearch);
+        })
+        .catch(err => console.error('刷新失败:', err));
+}
+
+function updateCard(component, info) {
+    // 更新状态点
+    const card = document.querySelector(`.component-card`);
+    // 简化：直接刷新页面获取最新数据
+    // 生产环境可用 SSE 或更精细的 DOM 更新
+}
+</script>
+{% endblock %}

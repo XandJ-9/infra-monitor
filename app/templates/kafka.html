@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Kafka 监控 - Infra Monitor{% endblock %}
+
+{% block content %}
+<h4 class="mb-3"><i class="bi bi-lightning"></i> Kafka 监控</h4>
+
+<!-- 状态概览 -->
+<div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>集群状态</span>
+        {% if status.connected %}
+            <span class="badge bg-success">已连接</span>
+        {% else %}
+            <span class="badge bg-danger">未连接</span>
+        {% endif %}
+    </div>
+    <div class="card-body">
+        {% if status.connected %}
+            <p class="mb-1"><strong>集群：</strong>{{ status.cluster or '已连接' }}</p>
+            <p class="mb-1"><strong>版本：</strong>{{ status.version or '-' }}</p>
+            {% for key, val in status.metrics.items() %}
+            <p class="mb-1"><strong>{{ key }}：</strong>{{ val }}</p>
+            {% endfor %}
+        {% else %}
+            <p class="text-danger">{{ status.error or '未连接' }}</p>
+        {% endif %}
+    </div>
+</div>
+
+{% if status.connected %}
+<!-- Broker 列表 -->
+<div class="card mb-3">
+    <div class="card-header">
+        <i class="bi bi-hdd-network"></i> Broker 列表
+        <span class="badge bg-info ms-2">{{ brokers|length }}</span>
+    </div>
+    <div class="card-body p-0">
+        {% if brokers %}
+        <table class="table table-sm table-hover mb-0">
+            <thead><tr><th>Broker ID</th><th>Host</th><th>Port</th></tr></thead>
+            <tbody>
+                {% for b in brokers %}
+                <tr>
+                    <td><span class="badge bg-primary">{{ b.broker_id }}</span></td>
+                    <td>{{ b.host }}</td>
+                    <td>{{ b.port }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="text-muted p-3 mb-0">暂无 Broker 信息</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Topic 列表 -->
+<div class="card mb-3">
+    <div class="card-header">
+        <i class="bi bi-list-columns"></i> Topic 列表
+        <span class="badge bg-info ms-2">{{ topics|length }}</span>
+    </div>
+    <div class="card-body p-0">
+        {% if topics %}
+        <table class="table table-sm table-hover mb-0">
+            <thead><tr><th>名称</th><th>分区数</th><th>副本数</th></tr></thead>
+            <tbody>
+                {% for t in topics %}
+                <tr>
+                    <td><code>{{ t.name }}</code></td>
+                    <td>{{ t.partitions }}</td>
+                    <td>{{ t.replicas }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="text-muted p-3 mb-0">暂无 Topic 信息</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Consumer Group 列表 -->
+<div class="card mb-3">
+    <div class="card-header">
+        <i class="bi bi-people"></i> Consumer Group 列表
+        <span class="badge bg-info ms-2">{{ consumer_groups|length }}</span>
+    </div>
+    <div class="card-body p-0">
+        {% if consumer_groups %}
+        <table class="table table-sm table-hover mb-0">
+            <thead><tr><th>Group ID</th><th>成员数</th><th>订阅 Topic</th><th>Lag</th></tr></thead>
+            <tbody>
+                {% for g in consumer_groups %}
+                <tr>
+                    <td><code>{{ g.group_id }}</code></td>
+                    <td>{{ g.members }}</td>
+                    <td>{{ g.topics|join(', ') or '-' }}</td>
+                    <td>
+                        {% if g.lag > 0 %}
+                            <span class="badge bg-warning">{{ g.lag }}</span>
+                        {% else %}
+                            {{ g.lag }}
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="text-muted p-3 mb-0">暂无 Consumer Group 信息</p>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}
