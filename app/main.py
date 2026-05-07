@@ -9,13 +9,11 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-from starlette.responses import Response
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from jinja2 import pass_context
 
 from app.routers import dashboard, zookeeper, kafka, elasticsearch
 
@@ -35,35 +33,22 @@ app = FastAPI(
     version="0.1.0",
 )
 
-
-class RootPathMiddleware(BaseHTTPMiddleware):
-    """将 root_path 注入到请求状态中，供模板和 JS 使用"""
-
-    async def dispatch(self, request: Request, call_next):
-        root_path = request.scope.get("root_path", "")
-        request.state.root_path = root_path
-        response = await call_next(request)
-        return response
-
-
-app.add_middleware(RootPathMiddleware)
-
 # 静态文件和模板
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+templates = Jinja2Templates(directory=str(BASE_DIR / "app" / "templates"))
 
 
-class ContextTemplates(Jinja2Templates):
-    """自动注入 root_path 到模板上下文的模板类"""
+# 通过 Jinja2 全局函数动态获取 root_path，兼容所有 Starlette/Jinja2 版本
+@pass_context
+def root_path_func(context: dict) -> str:
+    """从模板上下文中的 request 对象动态获取 root_path"""
+    request = context.get("request")
+    if request:
+        return request.scope.get("root_path", "")
+    return ""
 
-    def TemplateResponse(self, name: str, context: dict, **kwargs):
-        # 自动注入 root_path
-        request = context.get("request")
-        if request and "root_path" not in context:
-            context["root_path"] = request.scope.get("root_path", "")
-        return super().TemplateResponse(name, context, **kwargs)
 
-
-templates = ContextTemplates(directory=str(BASE_DIR / "app" / "templates"))
+templates.env.globals["root_path"] = root_path_func
 
 # 将 templates 对象挂到 app.state，路由中通过 request.app.state.templates 访问
 app.state.templates = templates
