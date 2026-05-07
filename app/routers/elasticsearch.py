@@ -29,13 +29,15 @@ async def es_page(request: Request):
         es.get_indices(),
     )
 
-    return request.app.state.templates.TemplateResponse("elasticsearch.html", {
-        "request": request,
-        "status": status,
-        "health": health,
-        "nodes": nodes,
-        "indices": indices,
-    })
+    return request.app.state.templates.TemplateResponse(
+        request,
+        "elasticsearch.html", {
+            "status": status,
+            "health": health,
+            "nodes": nodes,
+            "indices": indices,
+        }
+    )
 
 
 @router.get("/api/status")
@@ -85,10 +87,12 @@ async def es_indices():
 async def config_page(request: Request):
     """配置管理页面"""
     cfg = load_config()
-    return request.app.state.templates.TemplateResponse("config.html", {
-        "request": request,
-        "config": cfg,
-    })
+    return request.app.state.templates.TemplateResponse(
+        request,
+        "config.html", {
+            "config": cfg,
+        }
+    )
 
 
 @router.post("/config")
@@ -133,8 +137,10 @@ async def config_save(request: Request):
     from app.services.zk_service import ZKService
     ZKService().disconnect()
 
-    return request.app.state.templates.TemplateResponse("config.html", {
-        "request": request,
-        "config": cfg,
-        "saved": True,
-    })
+    return request.app.state.templates.TemplateResponse(
+        request,
+        "config.html", {
+            "config": cfg,
+            "saved": True,
+        }
+    )

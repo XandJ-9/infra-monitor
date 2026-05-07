@@ -9,6 +9,9 @@ venv/
 .venv/
 env/
 
+# uv
+.uv/
+
 # IDE
 .idea/
 .vscode/

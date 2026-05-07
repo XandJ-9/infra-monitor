@@ -35,20 +35,18 @@ app = FastAPI(
 
 # 静态文件和模板
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
-templates = Jinja2Templates(directory=str(BASE_DIR / "app" / "templates"))
 
+# 通过自定义模板类动态获取 root_path，兼容所有 Starlette/Jinja2 版本
+class ContextAwareTemplates(Jinja2Templates):
+    """支持动态 root_path 的模板类"""
 
-# 通过 Jinja2 全局函数动态获取 root_path，兼容所有 Starlette/Jinja2 版本
-@pass_context
-def root_path_func(context: dict) -> str:
-    """从模板上下文中的 request 对象动态获取 root_path"""
-    request = context.get("request")
-    if request:
-        return request.scope.get("root_path", "")
-    return ""
+    def TemplateResponse(self, request, name, context=None, **kwargs):
+        """重写 TemplateResponse 方法，自动注入 root_path"""
+        context = context or {}
+        context["root_path"] = request.scope.get("root_path", "")
+        return super().TemplateResponse(request, name, context, **kwargs)
 
-
-templates.env.globals["root_path"] = root_path_func
+templates = ContextAwareTemplates(directory=str(BASE_DIR / "app" / "templates"))
 
 # 将 templates 对象挂到 app.state，路由中通过 request.app.state.templates 访问
 app.state.templates = templates

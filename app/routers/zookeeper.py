@@ -47,12 +47,14 @@ async def zk_page(request: Request):
     else:
         key_nodes = [{"path": p, "exists": False} for p in key_paths]
 
-    return request.app.state.templates.TemplateResponse("zookeeper.html", {
-        "request": request,
-        "status": status,
-        "servers": servers,
-        "key_nodes": key_nodes,
-    })
+    return request.app.state.templates.TemplateResponse(
+        request,
+        "zookeeper.html", {
+            "status": status,
+            "servers": servers,
+            "key_nodes": key_nodes,
+        }
+    )
 
 
 @router.get("/api/status")

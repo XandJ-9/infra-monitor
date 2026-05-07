@@ -48,13 +48,15 @@ async def dashboard(request: Request):
     cfg = load_config()
     refresh_interval = cfg.get("refresh_interval", 30)
 
-    return request.app.state.templates.TemplateResponse("dashboard.html", {
-        "request": request,
-        "zk_status": zk_status,
-        "kafka_status": kafka_status,
-        "es_status": es_status,
-        "refresh_interval": refresh_interval,
-    })
+    return request.app.state.templates.TemplateResponse(
+        request,
+        "dashboard.html", {
+            "zk_status": zk_status,
+            "kafka_status": kafka_status,
+            "es_status": es_status,
+            "refresh_interval": refresh_interval,
+        }
+    )
 
 
 @router.get("/api/dashboard/status")

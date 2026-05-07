@@ -25,13 +25,15 @@ async def kafka_page(request: Request):
     topics = await asyncio.to_thread(kafka.get_topics)
     consumer_groups = await asyncio.to_thread(kafka.get_consumer_groups)
 
-    return request.app.state.templates.TemplateResponse("kafka.html", {
-        "request": request,
-        "status": status,
-        "brokers": brokers,
-        "topics": topics,
-        "consumer_groups": consumer_groups,
-    })
+    return request.app.state.templates.TemplateResponse(
+        request,
+        "kafka.html", {
+            "status": status,
+            "brokers": brokers,
+            "topics": topics,
+            "consumer_groups": consumer_groups,
+        }
+    )
 
 
 @router.get("/api/status")
