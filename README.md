@@ -2,6 +2,23 @@
 
 基础设施监控面板 —— ZooKeeper / Kafka / Elasticsearch 一站式监控。
 
+## 截图预览
+
+### 仪表盘
+![Dashboard](screenshots/dashboard.png)
+
+### ZooKeeper 监控
+![ZooKeeper](screenshots/zookeeper.png)
+
+### Kafka 监控
+![Kafka](screenshots/kafka.png)
+
+### Elasticsearch 监控
+![Elasticsearch](screenshots/elasticsearch.png)
+
+### 配置管理
+![Config](screenshots/config.png)
+
 ## 功能特性
 
 - **首页仪表盘**：一览三个组件的连接状态、版本、关键指标

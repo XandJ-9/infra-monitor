@@ -28,11 +28,19 @@ async def dashboard(request: Request):
     kafka = KafkaService()
     es = ESService()
 
-    # 并发获取各组件状态
-    zk_status, es_status = await asyncio.gather(
-        asyncio.to_thread(zk.get_status),
-        es.get_status(),
-    )
+    # 并发获取各组件状态（设置总超时 15 秒）
+    try:
+        zk_status, es_status = await asyncio.wait_for(
+            asyncio.gather(
+                asyncio.to_thread(zk.get_status),
+                es.get_status(),
+            ),
+            timeout=15,
+        )
+    except asyncio.TimeoutError:
+        from app.models import ComponentStatus
+        zk_status = ComponentStatus(name="ZooKeeper", connected=False, error="连接超时")
+        es_status = await es.get_status()
     kafka_status = kafka.get_status()
 
     # 读取刷新间隔

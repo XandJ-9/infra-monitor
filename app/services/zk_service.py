@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
+import time
 from typing import Any
 
 from kazoo.client import KazooClient
@@ -35,6 +36,7 @@ class ZKService:
                 cls._instance._zk = None
                 cls._instance._hosts = ""
                 cls._instance._timeout = 10
+                cls._instance._last_fail_time = None
             return cls._instance
 
     @property
@@ -56,7 +58,10 @@ class ZKService:
         self._hosts = hosts
         self._timeout = timeout
         try:
-            self._zk = KazooClient(hosts=hosts, timeout=timeout)
+            from kazoo.retry import KazooRetry
+            retry_policy = KazooRetry(max_tries=1, max_delay=1, sleep_func=time.sleep)
+            self._zk = KazooClient(hosts=hosts, timeout=timeout,
+                                    connection_retry=retry_policy)
             self._zk.start(timeout=timeout)
             logger.info("ZK 已连接: %s", hosts)
         except Exception as e:
@@ -74,12 +79,23 @@ class ZKService:
             self._zk = None
 
     def ensure_connection(self) -> None:
-        """确保连接，使用当前配置"""
+        """确保连接，使用当前配置。连接失败后短时间内不重试（避免页面超时）"""
+        # 如果已连接或正在冷却期内，直接返回
+        if self.connected:
+            return
+        now = time.time()
+        if self._last_fail_time and (now - self._last_fail_time) < 10:
+            return  # 10 秒冷却期，避免反复重试导致页面卡死
         cfg = load_config()
         zk_cfg = cfg.get("zookeeper", {})
         hosts = zk_cfg.get("hosts", "127.0.0.1:2181")
-        timeout = zk_cfg.get("timeout", 10)
-        self._connect(hosts, timeout)
+        timeout = zk_cfg.get("timeout", 5)  # 默认 5 秒超时
+        try:
+            self._connect(hosts, timeout)
+            if not self.connected:
+                self._last_fail_time = now
+        except Exception:
+            self._last_fail_time = now
 
     def get_status(self) -> ComponentStatus:
         """获取 ZK 整体状态"""

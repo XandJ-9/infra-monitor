@@ -12,6 +12,7 @@ import json
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
+from app.models import ComponentStatus
 from app.services.zk_service import ZKService
 
 router = APIRouter(prefix="/zookeeper", tags=["ZooKeeper"])
@@ -21,16 +22,30 @@ router = APIRouter(prefix="/zookeeper", tags=["ZooKeeper"])
 async def zk_page(request: Request):
     """ZK 监控页面"""
     zk = ZKService()
-    status = await asyncio.to_thread(zk.get_status)
-    servers = await asyncio.to_thread(zk.get_server_info)
+
+    # 设置总超时 15 秒，避免 ZK 连接阻塞页面
+    try:
+        status, servers = await asyncio.wait_for(
+            asyncio.gather(
+                asyncio.to_thread(zk.get_status),
+                asyncio.to_thread(zk.get_server_info),
+            ),
+            timeout=15,
+        )
+    except asyncio.TimeoutError:
+        status = ComponentStatus(name="ZooKeeper", connected=False, error="连接超时")
+        servers = []
 
     # 获取关键 znode 监控
     key_paths = ["/controller", "/brokers", "/brokers/ids", "/brokers/topics",
                  "/cluster", "/admin", "/config"]
     key_nodes = []
-    for path in key_paths:
-        exists = await asyncio.to_thread(zk.exists, path)
-        key_nodes.append({"path": path, "exists": exists})
+    if zk.connected:
+        for path in key_paths:
+            exists = await asyncio.to_thread(zk.exists, path)
+            key_nodes.append({"path": path, "exists": exists})
+    else:
+        key_nodes = [{"path": p, "exists": False} for p in key_paths]
 
     return request.app.state.templates.TemplateResponse("zookeeper.html", {
         "request": request,
