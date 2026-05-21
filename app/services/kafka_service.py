@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
 
 from app.models import ComponentStatus, KafkaBrokerInfo, KafkaTopicInfo, KafkaConsumerGroupInfo
 from app.services.zk_service import ZKService

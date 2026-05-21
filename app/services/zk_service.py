@@ -8,7 +8,6 @@ ZooKeeper 服务层
 
 from __future__ import annotations
 
-import json
 import logging
 import threading
 import time
@@ -111,8 +110,7 @@ class ZKService:
             # 尝试获取集群信息
             # 从 /zookeeper/config 获取集群配置（ZK 3.5+）
             try:
-                data, _ = self._zk.get("/zookeeper/config")
-                config_text = data.decode("utf-8", errors="replace") if data else ""
+                self._zk.get("/zookeeper/config")
                 status.cluster = "connected"
                 # 解析版本信息从环境变量
                 data_ver, _ = self._zk.get("/zookeeper/version")
@@ -189,7 +187,6 @@ class ZKService:
                     # 格式: server.1=host:port1:port2;clientPort
                     parts = line.split("=", 1)
                     if len(parts) == 2:
-                        server_id = parts[0].replace("server.", "")
                         addr = parts[1]
                         host_port = addr.split(":")
                         host = host_port[0] if host_port else "unknown"

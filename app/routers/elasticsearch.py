@@ -13,7 +13,9 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from app.config import load_config, save_config
+from app.models import ComponentStatus
 from app.services.es_service import ESService
+from app.timeouts import with_timeout
 
 router = APIRouter(prefix="/elasticsearch", tags=["Elasticsearch"])
 
@@ -23,10 +25,13 @@ async def es_page(request: Request):
     """ES 监控页面"""
     es = ESService()
     status, health, nodes, indices = await asyncio.gather(
-        es.get_status(),
-        es.get_cluster_health(),
-        es.get_nodes(),
-        es.get_indices(),
+        with_timeout(
+            es.get_status(),
+            fallback=ComponentStatus(name="Elasticsearch", connected=False, error="连接超时"),
+        ),
+        with_timeout(es.get_cluster_health(), fallback={}),
+        with_timeout(es.get_nodes(), fallback=[]),
+        with_timeout(es.get_indices(), fallback=[]),
     )
 
     return request.app.state.templates.TemplateResponse(
@@ -44,7 +49,10 @@ async def es_page(request: Request):
 async def es_status():
     """API：获取 ES 状态"""
     es = ESService()
-    status = await es.get_status()
+    status = await with_timeout(
+        es.get_status(),
+        fallback=ComponentStatus(name="Elasticsearch", connected=False, error="连接超时"),
+    )
     return {
         "connected": status.connected,
         "cluster": status.cluster,
@@ -58,14 +66,14 @@ async def es_status():
 async def es_health():
     """API：获取集群健康"""
     es = ESService()
-    return await es.get_cluster_health()
+    return await with_timeout(es.get_cluster_health(), fallback={})
 
 
 @router.get("/api/nodes")
 async def es_nodes():
     """API：获取节点列表"""
     es = ESService()
-    nodes = await es.get_nodes()
+    nodes = await with_timeout(es.get_nodes(), fallback=[])
     return [{"name": n.name, "host": n.host, "role": n.role,
              "heap_percent": n.heap_percent, "ram_percent": n.ram_percent,
              "load": n.load} for n in nodes]
@@ -75,7 +83,7 @@ async def es_nodes():
 async def es_indices():
     """API：获取索引列表"""
     es = ESService()
-    indices = await es.get_indices()
+    indices = await with_timeout(es.get_indices(), fallback=[])
     return [{"name": i.name, "health": i.health, "status": i.status,
              "docs_count": i.docs_count, "store_size": i.store_size,
              "primaries": i.primaries, "replicas": i.replicas} for i in indices]

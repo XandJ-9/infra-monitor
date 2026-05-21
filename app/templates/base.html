@@ -45,6 +45,11 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link {% if '/files' in request.url.path %}active{% endif %}" href="{{ root_path }}/files/">
+                            <i class="bi bi-folder2-open"></i> 文件浏览器
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link {% if '/config' in request.url.path %}active{% endif %}" href="{{ root_path }}/elasticsearch/config">
                             <i class="bi bi-gear"></i> 配置
                         </a>

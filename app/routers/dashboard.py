@@ -14,34 +14,50 @@ from typing import AsyncGenerator
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 
-from app.services.zk_service import ZKService
-from app.services.kafka_service import KafkaService
+from app.models import ComponentStatus
 from app.services.es_service import ESService
+from app.services.kafka_service import KafkaService
+from app.services.zk_service import ZKService
+from app.timeouts import sync_with_timeout, with_timeout
 
 router = APIRouter()
+
+
+def _status_payload(status: ComponentStatus) -> dict:
+    return {
+        "connected": status.connected,
+        "cluster": status.cluster,
+        "version": status.version,
+        "error": status.error,
+        "metrics": status.metrics,
+    }
+
+
+async def _component_statuses() -> tuple[ComponentStatus, ComponentStatus, ComponentStatus]:
+    zk = ZKService()
+    kafka = KafkaService()
+    es = ESService()
+
+    return await asyncio.gather(
+        sync_with_timeout(
+            zk.get_status,
+            fallback=ComponentStatus(name="ZooKeeper", connected=False, error="连接超时"),
+        ),
+        sync_with_timeout(
+            kafka.get_status,
+            fallback=ComponentStatus(name="Kafka", connected=False, error="连接超时"),
+        ),
+        with_timeout(
+            es.get_status(),
+            fallback=ComponentStatus(name="Elasticsearch", connected=False, error="连接超时"),
+        ),
+    )
 
 
 @router.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
     """首页仪表盘"""
-    zk = ZKService()
-    kafka = KafkaService()
-    es = ESService()
-
-    # 并发获取各组件状态（设置总超时 15 秒）
-    try:
-        zk_status, es_status = await asyncio.wait_for(
-            asyncio.gather(
-                asyncio.to_thread(zk.get_status),
-                es.get_status(),
-            ),
-            timeout=15,
-        )
-    except asyncio.TimeoutError:
-        from app.models import ComponentStatus
-        zk_status = ComponentStatus(name="ZooKeeper", connected=False, error="连接超时")
-        es_status = await es.get_status()
-    kafka_status = kafka.get_status()
+    zk_status, kafka_status, es_status = await _component_statuses()
 
     # 读取刷新间隔
     from app.config import load_config
@@ -62,38 +78,12 @@ async def dashboard(request: Request):
 @router.get("/api/dashboard/status")
 async def dashboard_status():
     """API：获取各组件状态 JSON"""
-    zk = ZKService()
-    kafka = KafkaService()
-    es = ESService()
-
-    zk_status, es_status = await asyncio.gather(
-        asyncio.to_thread(zk.get_status),
-        es.get_status(),
-    )
-    kafka_status = kafka.get_status()
+    zk_status, kafka_status, es_status = await _component_statuses()
 
     return {
-        "zookeeper": {
-            "connected": zk_status.connected,
-            "cluster": zk_status.cluster,
-            "version": zk_status.version,
-            "error": zk_status.error,
-            "metrics": zk_status.metrics,
-        },
-        "kafka": {
-            "connected": kafka_status.connected,
-            "cluster": kafka_status.cluster,
-            "version": kafka_status.version,
-            "error": kafka_status.error,
-            "metrics": kafka_status.metrics,
-        },
-        "elasticsearch": {
-            "connected": es_status.connected,
-            "cluster": es_status.cluster,
-            "version": es_status.version,
-            "error": es_status.error,
-            "metrics": es_status.metrics,
-        },
+        "zookeeper": _status_payload(zk_status),
+        "kafka": _status_payload(kafka_status),
+        "elasticsearch": _status_payload(es_status),
     }
 
 
@@ -102,23 +92,12 @@ async def dashboard_sse():
     """SSE 实时推送各组件状态"""
     async def event_stream() -> AsyncGenerator[str, None]:
         while True:
-            zk = ZKService()
-            kafka = KafkaService()
-            es = ESService()
-
-            zk_status, es_status = await asyncio.gather(
-                asyncio.to_thread(zk.get_status),
-                es.get_status(),
-            )
-            kafka_status = kafka.get_status()
+            zk_status, kafka_status, es_status = await _component_statuses()
 
             data = {
-                "zookeeper": {"connected": zk_status.connected, "cluster": zk_status.cluster,
-                               "version": zk_status.version, "error": zk_status.error},
-                "kafka": {"connected": kafka_status.connected, "cluster": kafka_status.cluster,
-                          "version": kafka_status.version, "error": kafka_status.error},
-                "elasticsearch": {"connected": es_status.connected, "cluster": es_status.cluster,
-                                  "version": es_status.version, "error": es_status.error},
+                "zookeeper": _status_payload(zk_status),
+                "kafka": _status_payload(kafka_status),
+                "elasticsearch": _status_payload(es_status),
             }
             yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 

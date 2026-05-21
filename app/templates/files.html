@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block title %}文件浏览器 - Infra Monitor{% endblock %}
+
+{% block extra_css %}
+<style>
+.file-browser-shell {
+    height: calc(100vh - 180px);
+    min-height: 460px;
+}
+
+.file-browser-pane {
+    height: 100%;
+    min-height: 0;
+}
+
+.file-browser-card {
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.file-browser-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+}
+
+.file-browser-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #fff;
+}
+
+.file-preview-body {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+#preview-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    white-space: pre-wrap;
+}
+
+@media (max-width: 991.98px) {
+    .file-browser-shell {
+        height: auto;
+        min-height: 0;
+    }
+
+    .file-browser-pane {
+        height: 60vh;
+        min-height: 360px;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div>
+        <h4 class="mb-1"><i class="bi bi-folder2-open"></i> 文件浏览器</h4>
+        <div class="text-muted small">根目录: <code>{{ listing.root }}</code></div>
+    </div>
+    <button class="btn btn-sm btn-outline-primary" onclick="location.reload()">
+        <i class="bi bi-arrow-clockwise"></i> 刷新
+    </button>
+</div>
+
+{% if error %}
+<div class="alert alert-danger" role="alert">{{ error }}</div>
+{% endif %}
+
+<div class="row g-3 file-browser-shell">
+    <div class="col-lg-7 file-browser-pane">
+        <div class="card file-browser-card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>当前路径: <code>/{{ listing.path }}</code></span>
+                {% if listing.parent_path is not none %}
+                <a class="btn btn-sm btn-outline-secondary" href="{{ root_path }}/files/?path={{ listing.parent_path | urlencode }}">
+                    <i class="bi bi-arrow-up"></i> 上级目录
+                </a>
+                {% endif %}
+            </div>
+            <div class="table-responsive file-browser-scroll">
+                <table class="table table-sm table-hover align-middle mb-0 file-browser-table">
+                    <thead>
+                        <tr>
+                            <th>名称</th>
+                            <th>类型</th>
+                            <th class="text-end">大小</th>
+                            <th>修改时间</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in listing.entries %}
+                        <tr>
+                            <td>
+                                {% if entry.is_dir %}
+                                <a href="{{ root_path }}/files/?path={{ entry.path | urlencode }}" class="text-decoration-none">
+                                    <i class="bi bi-folder-fill text-warning"></i> {{ entry.name }}
+                                </a>
+                                {% else %}
+                                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none file-preview-link" data-path="{{ entry.path }}">
+                                    <i class="bi bi-file-earmark-text"></i> {{ entry.name }}
+                                </button>
+                                {% endif %}
+                            </td>
+                            <td>{{ "目录" if entry.is_dir else (entry.extension or "文件") }}</td>
+                            <td class="text-end">{{ "-" if entry.size is none else "{:,}".format(entry.size) }}</td>
+                            <td>{{ entry.modified }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" class="text-center text-muted py-4">目录为空</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-5 file-browser-pane">
+        <div class="card file-browser-card">
+            <div class="card-header">
+                <span id="preview-title">文件预览</span>
+            </div>
+            <div class="card-body file-preview-body">
+                <div id="preview-meta" class="text-muted small mb-2">选择左侧文件查看内容。</div>
+                <div id="preview-alert"></div>
+                <pre id="preview-content" class="bg-light border rounded p-3 mb-0 d-none"></pre>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.querySelectorAll('.file-preview-link').forEach((button) => {
+    button.addEventListener('click', () => previewFile(button.dataset.path));
+});
+
+function previewFile(path) {
+    const title = document.getElementById('preview-title');
+    const meta = document.getElementById('preview-meta');
+    const alertBox = document.getElementById('preview-alert');
+    const content = document.getElementById('preview-content');
+
+    title.textContent = path;
+    meta.textContent = '读取中...';
+    alertBox.innerHTML = '';
+    content.classList.add('d-none');
+    content.textContent = '';
+
+    const params = new URLSearchParams({path});
+    fetch(`${BASE_URL}/files/api/preview?${params.toString()}`)
+        .then((response) => {
+            if (!response.ok) {
+                return response.json().then((body) => {
+                    throw new Error(body.detail || `HTTP ${response.status}`);
+                });
+            }
+            return response.json();
+        })
+        .then((data) => {
+            title.textContent = data.name;
+            meta.textContent = `${data.size.toLocaleString()} bytes · ${data.modified}${data.encoding ? ` · ${data.encoding}` : ''}`;
+            if (!data.previewable) {
+                alertBox.innerHTML = `<div class="alert alert-warning">${escapeHtml(data.error || '该文件不可预览。')}</div>`;
+                return;
+            }
+            if (data.truncated) {
+                alertBox.innerHTML = '<div class="alert alert-info">内容已按配置上限截断。</div>';
+            }
+            content.textContent = data.content || '';
+            content.classList.remove('d-none');
+        })
+        .catch((error) => {
+            meta.textContent = '';
+            alertBox.innerHTML = `<div class="alert alert-danger">${escapeHtml(error.message)}</div>`;
+        });
+}
+</script>
+{% endblock %}

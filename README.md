@@ -43,16 +43,16 @@
 
 ```bash
 # 启动测试环境
-docker-compose up -d
+docker compose up -d
 
 # 查看服务状态
-docker-compose ps
+docker compose ps
 
 # 查看日志
-docker-compose logs -f
+docker compose logs -f
 
 # 停止测试环境
-docker-compose down
+docker compose down
 ```
 
 **使用启动脚本（推荐）**：
@@ -117,6 +117,23 @@ uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --root-path /infra-moni
 
 - 直接访问：http://localhost:8000
 - Nginx 代理：http://yourserver/infra-monitor/
+
+## 开发与测试
+
+推荐在提交前运行：
+
+```bash
+uv run ruff check .
+uv run pytest -q
+docker compose config --quiet
+```
+
+默认测试不会连接外部组件。需要验证 ZooKeeper、Kafka、Elasticsearch 连通性时，先启动本地 Docker 测试环境，再显式运行 integration 测试：
+
+```bash
+docker compose up -d
+RUN_CONNECTION_TESTS=1 uv run pytest -q -m integration
+```
 
 ## 项目结构
 

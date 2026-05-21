@@ -5,6 +5,7 @@
 """
 
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -15,9 +16,41 @@ from app.services.zk_service import ZKService
 from app.services.kafka_service import KafkaService
 from app.services.es_service import ESService
 
+if "pytest" in sys.modules:
+    import pytest
 
-async def test_zookeeper() -> bool:
+    async_test = pytest.mark.asyncio
+
+    def connection_test(func):
+        skip_unless_enabled = pytest.mark.skipif(
+            os.environ.get("RUN_CONNECTION_TESTS") != "1",
+            reason=(
+                "Connection checks require local ZooKeeper/Kafka/Elasticsearch; "
+                "set RUN_CONNECTION_TESTS=1 to run them."
+            ),
+        )
+        return pytest.mark.integration(skip_unless_enabled(func))
+else:
+    def async_test(func):
+        return func
+
+    def connection_test(func):
+        return func
+
+
+def test_connection_script_imports() -> None:
+    """Keep pytest green while integration checks remain opt-in."""
+    assert callable(main)
+
+
+@connection_test
+@async_test
+async def test_zookeeper() -> None:
     """测试 ZooKeeper 连接"""
+    assert await check_zookeeper()
+
+
+async def check_zookeeper() -> bool:
     print("🦓 测试 ZooKeeper 连接...", end=" ")
     zk = ZKService()
     zk.ensure_connection()
@@ -31,8 +64,14 @@ async def test_zookeeper() -> bool:
     return True
 
 
-async def test_kafka() -> bool:
+@connection_test
+@async_test
+async def test_kafka() -> None:
     """测试 Kafka 连接"""
+    assert await check_kafka()
+
+
+async def check_kafka() -> bool:
     print("📦 测试 Kafka 连接...", end=" ")
     kafka = KafkaService()
     status = kafka.get_status()
@@ -45,8 +84,14 @@ async def test_kafka() -> bool:
     return True
 
 
-async def test_elasticsearch() -> bool:
+@connection_test
+@async_test
+async def test_elasticsearch() -> None:
     """测试 Elasticsearch 连接"""
+    assert await check_elasticsearch()
+
+
+async def check_elasticsearch() -> bool:
     print("🔍 测试 Elasticsearch 连接...", end=" ")
     es = ESService()
     status = await es.get_status()
@@ -67,9 +112,9 @@ async def main():
     print()
 
     results = await asyncio.gather(
-        test_zookeeper(),
-        test_kafka(),
-        test_elasticsearch(),
+        check_zookeeper(),
+        check_kafka(),
+        check_elasticsearch(),
     )
 
     print()

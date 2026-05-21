@@ -1,8 +1,6 @@
 # Docker Compose 配置 - 测试环境
 # 提供 ZooKeeper、Kafka、Elasticsearch 服务用于开发测试
 
-version: '3.8'
-
 services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0

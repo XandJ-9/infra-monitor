@@ -13,9 +13,8 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from jinja2 import pass_context
 
-from app.routers import dashboard, zookeeper, kafka, elasticsearch
+from app.routers import dashboard, elasticsearch, files, kafka, zookeeper
 
 # 日志配置
 logging.basicConfig(
@@ -56,6 +55,7 @@ app.include_router(dashboard.router)
 app.include_router(kafka.router)
 app.include_router(zookeeper.router)
 app.include_router(elasticsearch.router)
+app.include_router(files.router)
 
 
 @app.on_event("shutdown")

@@ -16,12 +16,12 @@
 <div class="row g-3" id="dashboard-cards">
     <!-- ZooKeeper 卡片 -->
     <div class="col-md-4">
-        <div class="card component-card h-100">
+        <div class="card component-card h-100" data-component="zookeeper">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-tree"></i> ZooKeeper</span>
                 <span class="status-dot {% if zk_status.connected %}status-ok{% else %}status-error{% endif %}"></span>
             </div>
-            <div class="card-body">
+            <div class="card-body component-card-body">
                 {% if zk_status.connected %}
                     <p class="mb-1"><strong>集群：</strong>{{ zk_status.cluster or '已连接' }}</p>
                     <p class="mb-1"><strong>版本：</strong>{{ zk_status.version or '-' }}</p>
@@ -40,12 +40,12 @@
 
     <!-- Kafka 卡片 -->
     <div class="col-md-4">
-        <div class="card component-card h-100">
+        <div class="card component-card h-100" data-component="kafka">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-lightning"></i> Kafka</span>
                 <span class="status-dot {% if kafka_status.connected %}status-ok{% else %}status-error{% endif %}"></span>
             </div>
-            <div class="card-body">
+            <div class="card-body component-card-body">
                 {% if kafka_status.connected %}
                     <p class="mb-1"><strong>集群：</strong>{{ kafka_status.cluster or '已连接' }}</p>
                     <p class="mb-1"><strong>版本：</strong>{{ kafka_status.version or '-' }}</p>
@@ -64,12 +64,12 @@
 
     <!-- Elasticsearch 卡片 -->
     <div class="col-md-4">
-        <div class="card component-card h-100">
+        <div class="card component-card h-100" data-component="elasticsearch">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-search"></i> Elasticsearch</span>
                 <span class="status-dot {% if es_status.connected %}status-ok{% else %}status-error{% endif %}"></span>
             </div>
-            <div class="card-body">
+            <div class="card-body component-card-body">
                 {% if es_status.connected %}
                     <p class="mb-1"><strong>集群：</strong>{{ es_status.cluster or '已连接' }}</p>
                     <p class="mb-1"><strong>版本：</strong>{{ es_status.version or '-' }}</p>
@@ -102,7 +102,12 @@ let refreshTimer = setInterval(refreshDashboard, refreshInterval * 1000);
 
 function refreshDashboard() {
     fetch(BASE_URL + '/api/dashboard/status')
-        .then(r => r.json())
+        .then(r => {
+            if (!r.ok) {
+                throw new Error(`HTTP ${r.status}`);
+            }
+            return r.json();
+        })
         .then(data => {
             updateCard('zookeeper', data.zookeeper);
             updateCard('kafka', data.kafka);
@@ -112,10 +117,41 @@ function refreshDashboard() {
 }
 
 function updateCard(component, info) {
-    // 更新状态点
-    const card = document.querySelector(`.component-card`);
-    // 简化：直接刷新页面获取最新数据
-    // 生产环境可用 SSE 或更精细的 DOM 更新
+    const card = document.querySelector(`.component-card[data-component="${component}"]`);
+    if (!card || !info) {
+        return;
+    }
+
+    const dot = card.querySelector('.status-dot');
+    if (dot) {
+        dot.classList.toggle('status-ok', Boolean(info.connected));
+        dot.classList.toggle('status-error', !info.connected);
+    }
+
+    const body = card.querySelector('.component-card-body');
+    if (!body) {
+        return;
+    }
+
+    if (!info.connected) {
+        body.innerHTML = `<p class="text-danger">${escapeHtml(info.error || '未连接')}</p>`;
+        return;
+    }
+
+    const rows = [
+        `<p class="mb-1"><strong>集群：</strong>${escapeHtml(info.cluster || '已连接')}</p>`,
+        `<p class="mb-1"><strong>版本：</strong>${escapeHtml(info.version || '-')}</p>`,
+    ];
+
+    Object.entries(info.metrics || {}).forEach(([key, value]) => {
+        if (key === 'status') {
+            rows.push(`<p class="mb-1 small text-muted">${healthBadge(String(value))}</p>`);
+        } else {
+            rows.push(`<p class="mb-1 small text-muted">${escapeHtml(key)}: ${escapeHtml(String(value))}</p>`);
+        }
+    });
+
+    body.innerHTML = rows.join('');
 }
 </script>
 {% endblock %}

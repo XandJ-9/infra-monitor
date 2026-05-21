@@ -8,11 +8,12 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 # 配置文件路径（项目根目录）
-CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "config.json"
+CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.json"
 
 # 默认配置
 DEFAULT_CONFIG: dict[str, Any] = {
@@ -23,6 +24,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "elasticsearch": {
         "url": "http://127.0.0.1:9200",
         "timeout": 10,
+    },
+    "file_browser": {
+        "root": ".",
+        "max_preview_bytes": 262144,
+        "enabled": True,
     },
     "refresh_interval": 30,
 }
@@ -35,15 +41,15 @@ def load_config() -> dict[str, Any]:
             with open(CONFIG_PATH, "r", encoding="utf-8") as f:
                 cfg = json.load(f)
             # 合并默认值，防止缺少字段
-            return _deep_merge(DEFAULT_CONFIG.copy(), cfg)
+            return _deep_merge(deepcopy(DEFAULT_CONFIG), cfg)
         except (json.JSONDecodeError, OSError):
-            return DEFAULT_CONFIG.copy()
-    return DEFAULT_CONFIG.copy()
+            return deepcopy(DEFAULT_CONFIG)
+    return deepcopy(DEFAULT_CONFIG)
 
 
 def save_config(cfg: dict[str, Any]) -> None:
     """保存配置到文件"""
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+    with open(CONFIG_PATH, "w", encoding="utf-8", newline="\n") as f:
         json.dump(cfg, f, indent=2, ensure_ascii=False)
 
 
