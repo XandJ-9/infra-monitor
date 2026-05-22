@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse
 
 from app.config import load_config, save_config
@@ -87,6 +87,20 @@ async def es_indices():
     return [{"name": i.name, "health": i.health, "status": i.status,
              "docs_count": i.docs_count, "store_size": i.store_size,
              "primaries": i.primaries, "replicas": i.replicas} for i in indices]
+
+
+@router.get("/api/search")
+async def es_search(
+    index: str = Query(..., min_length=1),
+    q: str = "",
+    size: int = Query(10, ge=1, le=100),
+):
+    """API：查询索引文档"""
+    es = ESService()
+    return await with_timeout(
+        es.search_documents(index=index, query=q, size=size),
+        fallback={"error": "查询超时", "hits": [], "total": 0},
+    )
 
 
 # ========== 配置管理路由 ==========

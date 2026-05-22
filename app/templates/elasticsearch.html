@@ -71,6 +71,43 @@
 </div>
 
 {% if status.connected %}
+<!-- 文档查询 -->
+<div class="card mb-3">
+    <div class="card-header">
+        <i class="bi bi-search"></i> 文档查询
+    </div>
+    <div class="card-body">
+        <form id="es-search-form" class="row g-2 align-items-end">
+            <div class="col-md-3">
+                <label for="es-search-index" class="form-label">索引</label>
+                <input class="form-control" id="es-search-index" list="es-index-options"
+                       placeholder="infra-monitor-demo" required>
+                <datalist id="es-index-options">
+                    {% for i in indices %}
+                    <option value="{{ i.name }}"></option>
+                    {% endfor %}
+                </datalist>
+            </div>
+            <div class="col-md-6">
+                <label for="es-search-query" class="form-label">查询语句</label>
+                <input class="form-control" id="es-search-query"
+                       placeholder='message:"infra-monitor 可查询测试数据"'>
+            </div>
+            <div class="col-md-2">
+                <label for="es-search-size" class="form-label">返回数量</label>
+                <input class="form-control" id="es-search-size" type="number" min="1" max="100" value="10">
+            </div>
+            <div class="col-md-1 d-grid">
+                <button class="btn btn-primary" type="submit">
+                    <i class="bi bi-search"></i>
+                </button>
+            </div>
+        </form>
+        <div id="es-search-status" class="small text-muted mt-3">输入索引后可查询文档，查询语句留空时返回最新文档。</div>
+        <div id="es-search-results" class="table-responsive mt-2"></div>
+    </div>
+</div>
+
 <!-- 节点列表 -->
 <div class="card mb-3">
     <div class="card-header">
@@ -146,4 +183,88 @@
     </div>
 </div>
 {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(() => {
+    const form = document.getElementById('es-search-form');
+    if (!form) {
+        return;
+    }
+
+    const indexInput = document.getElementById('es-search-index');
+    const queryInput = document.getElementById('es-search-query');
+    const sizeInput = document.getElementById('es-search-size');
+    const statusEl = document.getElementById('es-search-status');
+    const resultsEl = document.getElementById('es-search-results');
+
+    function renderHits(hits) {
+        resultsEl.replaceChildren();
+        if (!hits.length) {
+            const empty = document.createElement('div');
+            empty.className = 'alert alert-secondary mb-0';
+            empty.textContent = '没有匹配文档';
+            resultsEl.appendChild(empty);
+            return;
+        }
+
+        const table = document.createElement('table');
+        table.className = 'table table-sm table-hover align-middle mb-0';
+        table.innerHTML = '<thead><tr><th>索引</th><th>ID</th><th>Score</th><th>Source</th></tr></thead>';
+        const tbody = document.createElement('tbody');
+        for (const hit of hits) {
+            const row = document.createElement('tr');
+            const indexCell = document.createElement('td');
+            const idCell = document.createElement('td');
+            const scoreCell = document.createElement('td');
+            const sourceCell = document.createElement('td');
+            const code = document.createElement('code');
+            const pre = document.createElement('pre');
+
+            code.textContent = hit.index || '';
+            indexCell.appendChild(code);
+            idCell.textContent = hit.id || '';
+            scoreCell.textContent = hit.score == null ? '-' : hit.score;
+            pre.className = 'mb-0 small';
+            pre.textContent = JSON.stringify(hit.source || {}, null, 2);
+            sourceCell.appendChild(pre);
+
+            row.append(indexCell, idCell, scoreCell, sourceCell);
+            tbody.appendChild(row);
+        }
+        table.appendChild(tbody);
+        resultsEl.appendChild(table);
+    }
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const index = indexInput.value.trim();
+        const query = queryInput.value.trim();
+        const size = sizeInput.value || '10';
+        if (!index) {
+            indexInput.focus();
+            return;
+        }
+
+        statusEl.className = 'small text-muted mt-3';
+        statusEl.textContent = '查询中...';
+        resultsEl.replaceChildren();
+
+        const params = new URLSearchParams({ index, q: query, size });
+        const response = await fetch(`${window.BASE_URL}/elasticsearch/api/search?${params.toString()}`);
+        const data = await response.json();
+        if (data.error) {
+            statusEl.className = 'small text-danger mt-3';
+            statusEl.textContent = data.error;
+            renderHits([]);
+            return;
+        }
+
+        statusEl.className = 'small text-muted mt-3';
+        statusEl.textContent = `共命中 ${data.total || 0} 条，显示 ${data.hits.length} 条`;
+        renderHits(data.hits || []);
+    });
+})();
+</script>
 {% endblock %}

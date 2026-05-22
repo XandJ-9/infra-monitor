@@ -37,7 +37,7 @@ class ESService:
         es_cfg = cfg.get("elasticsearch", {})
         return es_cfg.get("url", "http://127.0.0.1:9200"), es_cfg.get("timeout", 10)
 
-    async def _get(self, path: str) -> dict | None:
+    async def _get(self, path: str) -> Any | None:
         """异步 GET 请求 ES API"""
         base_url, timeout = self._get_config()
         url = f"{base_url.rstrip('/')}{path}"
@@ -49,6 +49,21 @@ class ESService:
                 else:
                     logger.warning("ES API 返回 %d: %s", resp.status_code, url)
                     return None
+        except Exception as e:
+            logger.warning("ES 请求失败: %s - %s", url, e)
+            return None
+
+    async def _post(self, path: str, payload: dict[str, Any]) -> Any | None:
+        """异步 POST 请求 ES API"""
+        base_url, timeout = self._get_config()
+        url = f"{base_url.rstrip('/')}{path}"
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                resp = await client.post(url, json=payload)
+                if resp.status_code == 200:
+                    return resp.json()
+                logger.warning("ES API 返回 %d: %s", resp.status_code, url)
+                return None
         except Exception as e:
             logger.warning("ES 请求失败: %s - %s", url, e)
             return None
@@ -121,3 +136,48 @@ class ESService:
     async def get_cluster_stats(self) -> dict[str, Any]:
         """获取集群统计信息"""
         return await self._get("/_cluster/stats") or {}
+
+    async def search_documents(
+        self,
+        index: str,
+        query: str = "",
+        size: int = 10,
+    ) -> dict[str, Any]:
+        """查询索引文档"""
+        index = index.strip()
+        if not index:
+            return {"error": "索引名称不能为空", "hits": [], "total": 0}
+
+        size = max(1, min(size, 100))
+        query = query.strip()
+        search_query: dict[str, Any]
+        if query:
+            search_query = {
+                "query_string": {
+                    "query": query,
+                    "default_operator": "AND",
+                }
+            }
+        else:
+            search_query = {"match_all": {}}
+
+        payload = {
+            "query": search_query,
+            "size": size,
+            "sort": [{"@timestamp": {"order": "desc", "unmapped_type": "date"}}],
+        }
+        data = await self._post(f"/{index}/_search", payload)
+        if data is None:
+            return {"error": f"无法查询索引 {index}", "hits": [], "total": 0}
+
+        total_data = data.get("hits", {}).get("total", 0)
+        total = total_data.get("value", total_data) if isinstance(total_data, dict) else total_data
+        hits = []
+        for item in data.get("hits", {}).get("hits", []):
+            hits.append({
+                "index": item.get("_index", ""),
+                "id": item.get("_id", ""),
+                "score": item.get("_score"),
+                "source": item.get("_source", {}),
+            })
+        return {"hits": hits, "total": total, "error": ""}
