@@ -35,6 +35,7 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
 markers = [
     "integration: tests that require external ZooKeeper, Kafka, or Elasticsearch services",
 ]

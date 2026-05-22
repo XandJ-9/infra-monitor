@@ -1,4 +1,4 @@
-# 在线文件浏览器设计方案
+# Infra Monitor 在线文件浏览器设计方案
 
 ## 1. 背景与目标
 
@@ -184,7 +184,7 @@ app/
 
 ### 单元测试
 
-新增 `test_file_service.py`：
+新增或维护 `tests/test_file_service.py`：
 
 - 能列出根目录文件。
 - 能进入子目录。
@@ -195,7 +195,7 @@ app/
 
 ### 路由测试
 
-如引入 FastAPI `TestClient`：
+通过 `tests/test_files_router.py` 覆盖 FastAPI `TestClient` 场景：
 
 - `/files/` 返回 200。
 - `/files/api/list` 返回目录 JSON。

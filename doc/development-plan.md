@@ -1,4 +1,4 @@
-# Infra Monitor 开发计划方案
+# Infra Monitor 开发计划
 
 ## 背景与目标
 

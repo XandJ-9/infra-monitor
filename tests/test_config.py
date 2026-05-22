@@ -8,7 +8,7 @@ from app.config import CONFIG_PATH
 
 
 def test_config_path_points_to_project_root() -> None:
-    assert CONFIG_PATH == Path(__file__).resolve().parent / "config.json"
+    assert CONFIG_PATH == Path(__file__).resolve().parent.parent / "config.json"
 
 
 def test_load_config_merges_missing_nested_keys(tmp_path, monkeypatch) -> None:
