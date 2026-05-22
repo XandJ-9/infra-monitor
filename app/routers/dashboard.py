@@ -57,8 +57,6 @@ async def _component_statuses() -> tuple[ComponentStatus, ComponentStatus, Compo
 @router.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
     """首页仪表盘"""
-    zk_status, kafka_status, es_status = await _component_statuses()
-
     # 读取刷新间隔
     from app.config import load_config
     cfg = load_config()
@@ -67,9 +65,6 @@ async def dashboard(request: Request):
     return request.app.state.templates.TemplateResponse(
         request,
         "dashboard.html", {
-            "zk_status": zk_status,
-            "kafka_status": kafka_status,
-            "es_status": es_status,
             "refresh_interval": refresh_interval,
         }
     )

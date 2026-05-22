@@ -7,8 +7,6 @@ Elasticsearch 监控路由
 
 from __future__ import annotations
 
-import asyncio
-
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse
 
@@ -23,25 +21,10 @@ router = APIRouter(prefix="/elasticsearch", tags=["Elasticsearch"])
 @router.get("/", response_class=HTMLResponse)
 async def es_page(request: Request):
     """ES 监控页面"""
-    es = ESService()
-    status, health, nodes, indices = await asyncio.gather(
-        with_timeout(
-            es.get_status(),
-            fallback=ComponentStatus(name="Elasticsearch", connected=False, error="连接超时"),
-        ),
-        with_timeout(es.get_cluster_health(), fallback={}),
-        with_timeout(es.get_nodes(), fallback=[]),
-        with_timeout(es.get_indices(), fallback=[]),
-    )
-
     return request.app.state.templates.TemplateResponse(
         request,
-        "elasticsearch.html", {
-            "status": status,
-            "health": health,
-            "nodes": nodes,
-            "indices": indices,
-        }
+        "elasticsearch.html",
+        {},
     )
 
 

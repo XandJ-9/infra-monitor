@@ -9,63 +9,31 @@
     <div class="col-md-6">
         <div class="card">
             <div class="card-header">连接状态</div>
-            <div class="card-body">
-                {% if status.connected %}
-                    <span class="badge bg-success fs-6">已连接</span>
-                    <p class="mt-2 mb-1"><strong>集群：</strong>{{ status.cluster or '已连接' }}</p>
-                    <p class="mb-1"><strong>版本：</strong>{{ status.version or '-' }}</p>
-                {% else %}
-                    <span class="badge bg-danger fs-6">未连接</span>
-                    <p class="mt-2 text-danger">{{ status.error or '无法连接' }}</p>
-                {% endif %}
+            <div id="zk-status-body" class="card-body">
+                <p class="text-muted mb-0">
+                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                    正在加载连接状态...
+                </p>
             </div>
         </div>
     </div>
     <div class="col-md-6">
         <div class="card">
             <div class="card-header">关键 Znode 监控</div>
-            <div class="card-body">
-                {% for node in key_nodes %}
-                <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
-                    <code>{{ node.path }}</code>
-                    {% if node.exists %}
-                        <span class="badge bg-success">存在</span>
-                    {% else %}
-                        <span class="badge bg-secondary">不存在</span>
-                    {% endif %}
-                </div>
-                {% endfor %}
+            <div id="zk-key-nodes-body" class="card-body">
+                <p class="text-muted mb-0">连接状态确认后加载关键节点</p>
             </div>
         </div>
     </div>
 </div>
 
 <!-- 集群节点 -->
-{% if servers %}
 <div class="card mb-3">
     <div class="card-header">集群节点</div>
-    <div class="card-body p-0">
-        <table class="table table-sm mb-0">
-            <thead><tr><th>Host</th><th>Port</th><th>角色</th></tr></thead>
-            <tbody>
-                {% for s in servers %}
-                <tr>
-                    <td>{{ s.host }}</td>
-                    <td>{{ s.port }}</td>
-                    <td>
-                        {% if s.role %}
-                            <span class="badge bg-info">{{ s.role }}</span>
-                        {% else %}
-                            <span class="text-muted">-</span>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    <div id="zk-servers-body" class="card-body p-0">
+        <p class="text-muted p-3 mb-0">连接状态确认后加载集群节点</p>
     </div>
 </div>
-{% endif %}
 
 <!-- 节点树浏览器 -->
 <div class="card">
@@ -101,6 +69,65 @@
 
 {% block extra_js %}
 <script>
+const ZK_KEY_PATHS = ['/controller', '/brokers', '/brokers/ids', '/brokers/topics', '/cluster', '/admin', '/config'];
+
+function renderZkStatus(info) {
+    const body = document.getElementById('zk-status-body');
+    if (!info.connected) {
+        body.innerHTML = `
+            <span class="badge bg-danger fs-6">未连接</span>
+            <p class="mt-2 text-danger mb-0">${escapeHtml(info.error || '无法连接')}</p>`;
+        return;
+    }
+
+    body.innerHTML = `
+        <span class="badge bg-success fs-6">已连接</span>
+        <p class="mt-2 mb-1"><strong>集群：</strong>${escapeHtml(info.cluster || '已连接')}</p>
+        <p class="mb-0"><strong>版本：</strong>${escapeHtml(info.version || '-')}</p>`;
+}
+
+function setZkLazyMessage(message) {
+    document.getElementById('zk-key-nodes-body').innerHTML = `<p class="text-muted mb-0">${message}</p>`;
+    document.getElementById('zk-servers-body').innerHTML = `<p class="text-muted p-3 mb-0">${message}</p>`;
+}
+
+async function loadZkKeyNodes() {
+    const body = document.getElementById('zk-key-nodes-body');
+    body.innerHTML = '<p class="text-muted mb-0">正在加载关键节点...</p>';
+    const nodes = await Promise.all(ZK_KEY_PATHS.map(async (path) => {
+        const data = await fetch(`${BASE_URL}/zookeeper/api/exists?path=${encodeURIComponent(path)}`).then((r) => r.json());
+        return { path, exists: Boolean(data.exists) };
+    }));
+
+    body.innerHTML = nodes.map((node) => `
+        <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+            <code>${escapeHtml(node.path)}</code>
+            <span class="badge ${node.exists ? 'bg-success' : 'bg-secondary'}">${node.exists ? '存在' : '不存在'}</span>
+        </div>
+    `).join('');
+}
+
+async function loadZkServers() {
+    const body = document.getElementById('zk-servers-body');
+    body.innerHTML = '<p class="text-muted p-3 mb-0">正在加载集群节点...</p>';
+    const servers = await fetch(`${BASE_URL}/zookeeper/api/servers`).then((r) => r.json());
+    if (!servers.length) {
+        body.innerHTML = '<p class="text-muted p-3 mb-0">暂无集群节点信息</p>';
+        return;
+    }
+
+    body.innerHTML = `<table class="table table-sm mb-0">
+        <thead><tr><th>Host</th><th>Port</th><th>角色</th></tr></thead>
+        <tbody>${servers.map((s) => `
+            <tr>
+                <td>${escapeHtml(s.host || '')}</td>
+                <td>${escapeHtml(String(s.port || ''))}</td>
+                <td>${s.role ? `<span class="badge bg-info">${escapeHtml(s.role)}</span>` : '<span class="text-muted">-</span>'}</td>
+            </tr>
+        `).join('')}</tbody>
+    </table>`;
+}
+
 // 加载节点信息
 function loadNode(path) {
     if (!path) {
@@ -171,7 +198,19 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// 页面加载时自动查询根节点
-document.addEventListener('DOMContentLoaded', () => loadNode('/'));
+document.addEventListener('DOMContentLoaded', async () => {
+    try {
+        const status = await fetch(`${BASE_URL}/zookeeper/api/status`).then((r) => r.json());
+        renderZkStatus(status);
+        if (status.connected) {
+            await Promise.all([loadZkKeyNodes(), loadZkServers()]);
+        } else {
+            setZkLazyMessage('未连接，暂不加载明细');
+        }
+    } catch (err) {
+        document.getElementById('zk-status-body').innerHTML = `<p class="text-danger mb-0">加载失败: ${escapeHtml(String(err))}</p>`;
+        setZkLazyMessage('加载失败');
+    }
+});
 </script>
 {% endblock %}

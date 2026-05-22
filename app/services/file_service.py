@@ -40,12 +40,12 @@ class FileNotFoundErrorInRoot(FileBrowserError):
 class FileBrowserService:
     """Safe, read-only access to a configured filesystem root."""
 
-    def __init__(self, config: dict[str, Any] | None = None) -> None:
+    def __init__(self, config: dict[str, Any] | None = None, root: str | Path | None = None) -> None:
         cfg = config if config is not None else load_config()
         browser_cfg = cfg.get("file_browser", {})
         self.enabled = bool(browser_cfg.get("enabled", True))
         self.max_preview_bytes = int(browser_cfg.get("max_preview_bytes", 262144))
-        configured_root = Path(str(browser_cfg.get("root", "."))).expanduser()
+        configured_root = Path(str(root or browser_cfg.get("root", "."))).expanduser()
         if not configured_root.is_absolute():
             configured_root = PROJECT_ROOT / configured_root
         self.root = configured_root.resolve()

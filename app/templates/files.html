@@ -4,6 +4,10 @@
 {% block extra_css %}
 <style>
 .file-browser-shell {
+    --file-browser-left-width: 7fr;
+    display: grid;
+    grid-template-columns: minmax(280px, var(--file-browser-left-width)) 12px minmax(320px, 5fr);
+    gap: 0;
     height: calc(100vh - 180px);
     min-height: 460px;
 }
@@ -11,19 +15,74 @@
 .file-browser-pane {
     height: 100%;
     min-height: 0;
+    min-width: 0;
+}
+
+.file-browser-resizer {
+    position: relative;
+    cursor: col-resize;
+    touch-action: none;
+    outline: none;
+}
+
+.file-browser-resizer::before {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 1px;
+    background: #dee2e6;
+    content: "";
+    transform: translateX(-50%);
+}
+
+.file-browser-resizer::after {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 4px;
+    height: 48px;
+    border-radius: 999px;
+    background: #adb5bd;
+    content: "";
+    transform: translate(-50%, -50%);
+    transition: background-color 0.15s ease, width 0.15s ease;
+}
+
+.file-browser-resizer:hover::after,
+.file-browser-resizer:focus-visible::after,
+.file-browser-shell.is-resizing .file-browser-resizer::after {
+    width: 6px;
+    background: #0d6efd;
+}
+
+body.file-browser-resizing {
+    cursor: col-resize;
+    user-select: none;
+}
+
+.file-root-form {
+    width: min(680px, 100%);
 }
 
 .file-browser-card {
     height: 100%;
     min-height: 0;
+    min-width: 0;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
 }
 
 .file-browser-scroll {
     flex: 1 1 auto;
     min-height: 0;
+    min-width: 0;
     overflow: auto;
+}
+
+.file-browser-table {
+    table-layout: fixed;
 }
 
 .file-browser-table thead th {
@@ -31,6 +90,45 @@
     top: 0;
     z-index: 1;
     background: #fff;
+}
+
+.file-browser-table th,
+.file-browser-table td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.file-browser-name-col {
+    width: 46%;
+}
+
+.file-browser-type-col {
+    width: 15%;
+}
+
+.file-browser-size-col {
+    width: 15%;
+}
+
+.file-browser-time-col {
+    width: 24%;
+}
+
+.file-entry-link {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    min-width: 0;
+    gap: 0.25rem;
+    vertical-align: middle;
+}
+
+.file-entry-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .file-preview-body {
@@ -50,6 +148,7 @@
 
 @media (max-width: 991.98px) {
     .file-browser-shell {
+        display: block;
         height: auto;
         min-height: 0;
     }
@@ -57,6 +156,14 @@
     .file-browser-pane {
         height: 60vh;
         min-height: 360px;
+    }
+
+    .file-browser-resizer {
+        display: none;
+    }
+
+    .file-browser-resizer + .file-browser-pane {
+        margin-top: 1rem;
     }
 }
 </style>
@@ -66,24 +173,34 @@
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
     <div>
         <h4 class="mb-1"><i class="bi bi-folder2-open"></i> 文件浏览器</h4>
-        <div class="text-muted small">根目录: <code>{{ listing.root }}</code></div>
+        <div class="text-muted small">当前根目录: <code>{{ listing.root }}</code></div>
     </div>
-    <button class="btn btn-sm btn-outline-primary" onclick="location.reload()">
-        <i class="bi bi-arrow-clockwise"></i> 刷新
-    </button>
+    <form class="file-root-form" method="get" action="{{ root_path }}/files/">
+        <label class="visually-hidden" for="file-root-input">根目录</label>
+        <div class="input-group input-group-sm">
+            <span class="input-group-text"><i class="bi bi-folder2"></i></span>
+            <input id="file-root-input" class="form-control" type="text" name="root" value="{{ listing.root }}" autocomplete="off">
+            <button class="btn btn-outline-primary" type="submit">
+                <i class="bi bi-folder2-open"></i> 打开
+            </button>
+            <button class="btn btn-outline-secondary" type="button" onclick="location.reload()">
+                <i class="bi bi-arrow-clockwise"></i> 刷新
+            </button>
+        </div>
+    </form>
 </div>
 
 {% if error %}
 <div class="alert alert-danger" role="alert">{{ error }}</div>
 {% endif %}
 
-<div class="row g-3 file-browser-shell">
-    <div class="col-lg-7 file-browser-pane">
+<div id="file-browser-split" class="file-browser-shell">
+    <div class="file-browser-pane">
         <div class="card file-browser-card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span>当前路径: <code>/{{ listing.path }}</code></span>
                 {% if listing.parent_path is not none %}
-                <a class="btn btn-sm btn-outline-secondary" href="{{ root_path }}/files/?path={{ listing.parent_path | urlencode }}">
+                <a class="btn btn-sm btn-outline-secondary" href="{{ root_path }}/files/?root={{ listing.root | urlencode }}&path={{ listing.parent_path | urlencode }}">
                     <i class="bi bi-arrow-up"></i> 上级目录
                 </a>
                 {% endif %}
@@ -92,10 +209,10 @@
                 <table class="table table-sm table-hover align-middle mb-0 file-browser-table">
                     <thead>
                         <tr>
-                            <th>名称</th>
-                            <th>类型</th>
-                            <th class="text-end">大小</th>
-                            <th>修改时间</th>
+                            <th class="file-browser-name-col">名称</th>
+                            <th class="file-browser-type-col">类型</th>
+                            <th class="file-browser-size-col text-end">大小</th>
+                            <th class="file-browser-time-col">修改时间</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -103,12 +220,14 @@
                         <tr>
                             <td>
                                 {% if entry.is_dir %}
-                                <a href="{{ root_path }}/files/?path={{ entry.path | urlencode }}" class="text-decoration-none">
-                                    <i class="bi bi-folder-fill text-warning"></i> {{ entry.name }}
+                                <a href="{{ root_path }}/files/?root={{ listing.root | urlencode }}&path={{ entry.path | urlencode }}" class="text-decoration-none file-entry-link" title="{{ entry.name }}">
+                                    <i class="bi bi-folder-fill text-warning flex-shrink-0"></i>
+                                    <span class="file-entry-name">{{ entry.name }}</span>
                                 </a>
                                 {% else %}
-                                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none file-preview-link" data-path="{{ entry.path }}">
-                                    <i class="bi bi-file-earmark-text"></i> {{ entry.name }}
+                                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none file-preview-link file-entry-link" data-path="{{ entry.path }}" title="{{ entry.name }}">
+                                    <i class="bi bi-file-earmark-text flex-shrink-0"></i>
+                                    <span class="file-entry-name">{{ entry.name }}</span>
                                 </button>
                                 {% endif %}
                             </td>
@@ -127,7 +246,16 @@
         </div>
     </div>
 
-    <div class="col-lg-5 file-browser-pane">
+    <div
+        id="file-browser-resizer"
+        class="file-browser-resizer"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="调整文件列表和预览区域宽度"
+        tabindex="0"
+    ></div>
+
+    <div class="file-browser-pane">
         <div class="card file-browser-card">
             <div class="card-header">
                 <span id="preview-title">文件预览</span>
@@ -144,9 +272,118 @@
 
 {% block extra_js %}
 <script>
+const FILE_BROWSER_ROOT = {{ listing.root | tojson }};
+
 document.querySelectorAll('.file-preview-link').forEach((button) => {
     button.addEventListener('click', () => previewFile(button.dataset.path));
 });
+
+initFileBrowserSplitter();
+
+function initFileBrowserSplitter() {
+    const shell = document.getElementById('file-browser-split');
+    const resizer = document.getElementById('file-browser-resizer');
+    if (!shell || !resizer) {
+        return;
+    }
+
+    const storageKey = 'infra-monitor.file-browser.left-width';
+    const minLeftWidth = 280;
+    const minRightWidth = 320;
+    const storage = {
+        get() {
+            try {
+                return Number(localStorage.getItem(storageKey));
+            } catch {
+                return 0;
+            }
+        },
+        set(width) {
+            try {
+                localStorage.setItem(storageKey, String(Math.round(width)));
+            } catch {
+                // Dragging should keep working even if localStorage is unavailable.
+            }
+        },
+    };
+
+    const getGutterWidth = () => resizer.getBoundingClientRect().width || 12;
+    const getMaxLeftWidth = () => Math.max(minLeftWidth, shell.clientWidth - getGutterWidth() - minRightWidth);
+    const clampWidth = (width) => Math.min(Math.max(width, minLeftWidth), getMaxLeftWidth());
+    const setLeftWidth = (width, persist = false) => {
+        const nextWidth = clampWidth(width);
+        shell.style.setProperty('--file-browser-left-width', `${nextWidth}px`);
+        resizer.setAttribute('aria-valuemin', String(minLeftWidth));
+        resizer.setAttribute('aria-valuemax', String(Math.round(getMaxLeftWidth())));
+        resizer.setAttribute('aria-valuenow', String(Math.round(nextWidth)));
+        if (persist) {
+            storage.set(nextWidth);
+        }
+    };
+
+    const savedWidth = storage.get();
+    if (Number.isFinite(savedWidth) && savedWidth > 0) {
+        setLeftWidth(savedWidth);
+    }
+
+    const resizeFromClientX = (clientX) => {
+        const shellRect = shell.getBoundingClientRect();
+        setLeftWidth(clientX - shellRect.left);
+    };
+
+    resizer.addEventListener('pointerdown', (event) => {
+        if (window.matchMedia('(max-width: 991.98px)').matches) {
+            return;
+        }
+        event.preventDefault();
+        resizer.setPointerCapture(event.pointerId);
+        shell.classList.add('is-resizing');
+        document.body.classList.add('file-browser-resizing');
+        resizeFromClientX(event.clientX);
+    });
+
+    resizer.addEventListener('pointermove', (event) => {
+        if (!resizer.hasPointerCapture(event.pointerId)) {
+            return;
+        }
+        resizeFromClientX(event.clientX);
+    });
+
+    const endResize = (event) => {
+        if (resizer.hasPointerCapture(event.pointerId)) {
+            resizer.releasePointerCapture(event.pointerId);
+        }
+        shell.classList.remove('is-resizing');
+        document.body.classList.remove('file-browser-resizing');
+        const leftWidth = shell.getBoundingClientRect().left;
+        const resizerLeft = resizer.getBoundingClientRect().left;
+        setLeftWidth(resizerLeft - leftWidth, true);
+    };
+
+    resizer.addEventListener('pointerup', endResize);
+    resizer.addEventListener('pointercancel', endResize);
+
+    resizer.addEventListener('keydown', (event) => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+            return;
+        }
+        event.preventDefault();
+        const currentWidth = resizer.getBoundingClientRect().left - shell.getBoundingClientRect().left;
+        const step = event.shiftKey ? 48 : 16;
+        if (event.key === 'Home') {
+            setLeftWidth(minLeftWidth, true);
+        } else if (event.key === 'End') {
+            setLeftWidth(getMaxLeftWidth(), true);
+        } else {
+            setLeftWidth(currentWidth + (event.key === 'ArrowRight' ? step : -step), true);
+        }
+    });
+
+    window.addEventListener('resize', () => {
+        const currentWidth = resizer.getBoundingClientRect().left - shell.getBoundingClientRect().left;
+        setLeftWidth(currentWidth);
+    });
+}
 
 function previewFile(path) {
     const title = document.getElementById('preview-title');
@@ -160,7 +397,7 @@ function previewFile(path) {
     content.classList.add('d-none');
     content.textContent = '';
 
-    const params = new URLSearchParams({path});
+    const params = new URLSearchParams({path, root: FILE_BROWSER_ROOT});
     fetch(`${BASE_URL}/files/api/preview?${params.toString()}`)
         .then((response) => {
             if (!response.ok) {

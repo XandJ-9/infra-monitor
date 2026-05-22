@@ -6,8 +6,6 @@ ZooKeeper 监控路由
 
 from __future__ import annotations
 
-import asyncio
-
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
@@ -21,35 +19,10 @@ router = APIRouter(prefix="/zookeeper", tags=["ZooKeeper"])
 @router.get("/", response_class=HTMLResponse)
 async def zk_page(request: Request):
     """ZK 监控页面"""
-    zk = ZKService()
-
-    # 设置总超时 15 秒，避免 ZK 连接阻塞页面
-    status, servers = await asyncio.gather(
-        sync_with_timeout(
-            zk.get_status,
-            fallback=ComponentStatus(name="ZooKeeper", connected=False, error="连接超时"),
-        ),
-        sync_with_timeout(zk.get_server_info, fallback=[]),
-    )
-
-    # 获取关键 znode 监控
-    key_paths = ["/controller", "/brokers", "/brokers/ids", "/brokers/topics",
-                 "/cluster", "/admin", "/config"]
-    key_nodes = []
-    if zk.connected:
-        for path in key_paths:
-            exists = await sync_with_timeout(zk.exists, path, fallback=False)
-            key_nodes.append({"path": path, "exists": exists})
-    else:
-        key_nodes = [{"path": p, "exists": False} for p in key_paths]
-
     return request.app.state.templates.TemplateResponse(
         request,
-        "zookeeper.html", {
-            "status": status,
-            "servers": servers,
-            "key_nodes": key_nodes,
-        }
+        "zookeeper.html",
+        {},
     )
 
 

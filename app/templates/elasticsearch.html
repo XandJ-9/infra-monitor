@@ -9,68 +9,24 @@
     <div class="col-md-4">
         <div class="card h-100">
             <div class="card-header">连接状态</div>
-            <div class="card-body">
-                {% if status.connected %}
-                    <span class="badge bg-success fs-6">已连接</span>
-                    <p class="mt-2 mb-1"><strong>集群：</strong>{{ status.cluster }}</p>
-                    <p class="mb-1"><strong>版本：</strong>{{ status.version }}</p>
-                {% else %}
-                    <span class="badge bg-danger fs-6">未连接</span>
-                    <p class="mt-2 text-danger">{{ status.error or '无法连接' }}</p>
-                {% endif %}
+            <div id="es-status-body" class="card-body">
+                <p class="text-muted mb-0">
+                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                    正在加载连接状态...
+                </p>
             </div>
         </div>
     </div>
     <div class="col-md-8">
         <div class="card h-100">
             <div class="card-header">集群健康</div>
-            <div class="card-body">
-                {% if health %}
-                    <div class="d-flex gap-3 flex-wrap">
-                        <div class="text-center">
-                            <div class="fs-4">
-                                {% if health.status == 'green' %}
-                                    <span class="badge bg-success">GREEN</span>
-                                {% elif health.status == 'yellow' %}
-                                    <span class="badge bg-warning text-dark">YELLOW</span>
-                                {% else %}
-                                    <span class="badge bg-danger">RED</span>
-                                {% endif %}
-                            </div>
-                            <small class="text-muted">状态</small>
-                        </div>
-                        <div class="text-center">
-                            <div class="fs-4">{{ health.number_of_nodes or '-' }}</div>
-                            <small class="text-muted">节点数</small>
-                        </div>
-                        <div class="text-center">
-                            <div class="fs-4">{{ health.active_shards or '-' }}</div>
-                            <small class="text-muted">活跃分片</small>
-                        </div>
-                        <div class="text-center">
-                            <div class="fs-4">{{ health.active_primary_shards or '-' }}</div>
-                            <small class="text-muted">主分片</small>
-                        </div>
-                        <div class="text-center">
-                            <div class="fs-4 {% if health.unassigned_shards %}text-danger{% endif %}">
-                                {{ health.unassigned_shards or 0 }}
-                            </div>
-                            <small class="text-muted">未分配分片</small>
-                        </div>
-                        <div class="text-center">
-                            <div class="fs-4">{{ health.number_of_data_nodes or '-' }}</div>
-                            <small class="text-muted">数据节点</small>
-                        </div>
-                    </div>
-                {% else %}
-                    <p class="text-muted">无法获取集群健康信息</p>
-                {% endif %}
+            <div id="es-health-body" class="card-body">
+                <p class="text-muted mb-0">连接状态确认后加载健康信息</p>
             </div>
         </div>
     </div>
 </div>
 
-{% if status.connected %}
 <!-- 文档查询 -->
 <div class="card mb-3">
     <div class="card-header">
@@ -81,29 +37,25 @@
             <div class="col-md-3">
                 <label for="es-search-index" class="form-label">索引</label>
                 <input class="form-control" id="es-search-index" list="es-index-options"
-                       placeholder="infra-monitor-demo" required>
-                <datalist id="es-index-options">
-                    {% for i in indices %}
-                    <option value="{{ i.name }}"></option>
-                    {% endfor %}
-                </datalist>
+                       placeholder="infra-monitor-demo" required disabled>
+                <datalist id="es-index-options"></datalist>
             </div>
             <div class="col-md-6">
                 <label for="es-search-query" class="form-label">查询语句</label>
                 <input class="form-control" id="es-search-query"
-                       placeholder='message:"infra-monitor 可查询测试数据"'>
+                       placeholder='message:"infra-monitor 可查询测试数据"' disabled>
             </div>
             <div class="col-md-2">
                 <label for="es-search-size" class="form-label">返回数量</label>
-                <input class="form-control" id="es-search-size" type="number" min="1" max="100" value="10">
+                <input class="form-control" id="es-search-size" type="number" min="1" max="100" value="10" disabled>
             </div>
             <div class="col-md-1 d-grid">
-                <button class="btn btn-primary" type="submit">
+                <button id="es-search-submit" class="btn btn-primary" type="submit" disabled>
                     <i class="bi bi-search"></i>
                 </button>
             </div>
         </form>
-        <div id="es-search-status" class="small text-muted mt-3">输入索引后可查询文档，查询语句留空时返回最新文档。</div>
+        <div id="es-search-status" class="small text-muted mt-3">连接成功后可查询文档。</div>
         <div id="es-search-results" class="table-responsive mt-2"></div>
     </div>
 </div>
@@ -112,34 +64,10 @@
 <div class="card mb-3">
     <div class="card-header">
         <i class="bi bi-hdd-network"></i> 节点列表
-        <span class="badge bg-info ms-2">{{ nodes|length }}</span>
+        <span id="es-nodes-count" class="badge bg-secondary ms-2">-</span>
     </div>
-    <div class="card-body p-0">
-        {% if nodes %}
-        <table class="table table-sm table-hover mb-0">
-            <thead><tr><th>名称</th><th>Host</th><th>角色</th><th>Heap</th><th>RAM</th><th>负载</th></tr></thead>
-            <tbody>
-                {% for n in nodes %}
-                <tr>
-                    <td><strong>{{ n.name }}</strong></td>
-                    <td>{{ n.host }}</td>
-                    <td>{{ n.role }}</td>
-                    <td>
-                        <div class="progress" style="height: 18px; min-width: 60px;">
-                            {% set heap = n.heap_percent|int if n.heap_percent.isdigit() else 0 %}
-                            <div class="progress-bar {% if heap > 85 %}bg-danger{% elif heap > 70 %}bg-warning{% else %}bg-success{% endif %}"
-                                 style="width: {{ heap }}%">{{ heap }}%</div>
-                        </div>
-                    </td>
-                    <td>{{ n.ram_percent }}%</td>
-                    <td>{{ n.load }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <p class="text-muted p-3 mb-0">暂无节点信息</p>
-        {% endif %}
+    <div id="es-nodes-body" class="card-body p-0">
+        <p class="text-muted p-3 mb-0">连接状态确认后加载节点信息</p>
     </div>
 </div>
 
@@ -147,46 +75,136 @@
 <div class="card mb-3">
     <div class="card-header">
         <i class="bi bi-collection"></i> 索引列表
-        <span class="badge bg-info ms-2">{{ indices|length }}</span>
+        <span id="es-indices-count" class="badge bg-secondary ms-2">-</span>
     </div>
-    <div class="card-body p-0">
-        {% if indices %}
-        <div class="table-responsive">
-            <table class="table table-sm table-hover mb-0">
-                <thead><tr><th>名称</th><th>健康</th><th>状态</th><th>文档数</th><th>大小</th><th>主分片</th><th>副本</th></tr></thead>
-                <tbody>
-                    {% for i in indices %}
-                    <tr>
-                        <td><code>{{ i.name }}</code></td>
-                        <td>
-                            {% if i.health == 'green' %}
-                                <span class="badge bg-success">green</span>
-                            {% elif i.health == 'yellow' %}
-                                <span class="badge bg-warning text-dark">yellow</span>
-                            {% else %}
-                                <span class="badge bg-danger">red</span>
-                            {% endif %}
-                        </td>
-                        <td>{{ i.status }}</td>
-                        <td>{{ i.docs_count }}</td>
-                        <td>{{ i.store_size }}</td>
-                        <td>{{ i.primaries }}</td>
-                        <td>{{ i.replicas }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        {% else %}
-        <p class="text-muted p-3 mb-0">暂无索引信息</p>
-        {% endif %}
+    <div id="es-indices-body" class="card-body p-0">
+        <p class="text-muted p-3 mb-0">连接状态确认后加载索引信息</p>
     </div>
 </div>
-{% endif %}
 {% endblock %}
 
 {% block extra_js %}
 <script>
+function renderEsStatus(info) {
+    const body = document.getElementById('es-status-body');
+    if (!info.connected) {
+        body.innerHTML = `
+            <span class="badge bg-danger fs-6">未连接</span>
+            <p class="mt-2 text-danger mb-0">${escapeHtml(info.error || '无法连接')}</p>`;
+        return;
+    }
+
+    body.innerHTML = `
+        <span class="badge bg-success fs-6">已连接</span>
+        <p class="mt-2 mb-1"><strong>集群：</strong>${escapeHtml(info.cluster || '已连接')}</p>
+        <p class="mb-0"><strong>版本：</strong>${escapeHtml(info.version || '-')}</p>`;
+}
+
+function setEsLazyMessage(message) {
+    document.getElementById('es-health-body').innerHTML = `<p class="text-muted mb-0">${message}</p>`;
+    document.getElementById('es-nodes-body').innerHTML = `<p class="text-muted p-3 mb-0">${message}</p>`;
+    document.getElementById('es-indices-body').innerHTML = `<p class="text-muted p-3 mb-0">${message}</p>`;
+    document.getElementById('es-nodes-count').textContent = '-';
+    document.getElementById('es-indices-count').textContent = '-';
+}
+
+function renderEsHealth(health) {
+    const body = document.getElementById('es-health-body');
+    if (!health || !Object.keys(health).length) {
+        body.innerHTML = '<p class="text-muted mb-0">无法获取集群健康信息</p>';
+        return;
+    }
+
+    const status = health.status || 'unknown';
+    const statusClass = status === 'green' ? 'bg-success' : status === 'yellow' ? 'bg-warning text-dark' : 'bg-danger';
+    body.innerHTML = `<div class="d-flex gap-3 flex-wrap">
+        <div class="text-center"><div class="fs-4"><span class="badge ${statusClass}">${escapeHtml(status.toUpperCase())}</span></div><small class="text-muted">状态</small></div>
+        <div class="text-center"><div class="fs-4">${escapeHtml(String(health.number_of_nodes || '-'))}</div><small class="text-muted">节点数</small></div>
+        <div class="text-center"><div class="fs-4">${escapeHtml(String(health.active_shards || '-'))}</div><small class="text-muted">活跃分片</small></div>
+        <div class="text-center"><div class="fs-4">${escapeHtml(String(health.active_primary_shards || '-'))}</div><small class="text-muted">主分片</small></div>
+        <div class="text-center"><div class="fs-4 ${health.unassigned_shards ? 'text-danger' : ''}">${escapeHtml(String(health.unassigned_shards || 0))}</div><small class="text-muted">未分配分片</small></div>
+        <div class="text-center"><div class="fs-4">${escapeHtml(String(health.number_of_data_nodes || '-'))}</div><small class="text-muted">数据节点</small></div>
+    </div>`;
+}
+
+function renderEsNodes(nodes) {
+    const body = document.getElementById('es-nodes-body');
+    const count = document.getElementById('es-nodes-count');
+    count.className = 'badge bg-info ms-2';
+    count.textContent = nodes.length;
+    if (!nodes.length) {
+        body.innerHTML = '<p class="text-muted p-3 mb-0">暂无节点信息</p>';
+        return;
+    }
+
+    body.innerHTML = `<table class="table table-sm table-hover mb-0">
+        <thead><tr><th>名称</th><th>Host</th><th>角色</th><th>Heap</th><th>RAM</th><th>负载</th></tr></thead>
+        <tbody>${nodes.map((n) => {
+            const heap = /^\d+$/.test(n.heap_percent || '') ? Number(n.heap_percent) : 0;
+            const progressClass = heap > 85 ? 'bg-danger' : heap > 70 ? 'bg-warning' : 'bg-success';
+            return `<tr>
+                <td><strong>${escapeHtml(n.name || '')}</strong></td>
+                <td>${escapeHtml(n.host || '')}</td>
+                <td>${escapeHtml(n.role || '')}</td>
+                <td><div class="progress" style="height: 18px; min-width: 60px;"><div class="progress-bar ${progressClass}" style="width: ${heap}%">${heap}%</div></div></td>
+                <td>${escapeHtml(String(n.ram_percent || ''))}%</td>
+                <td>${escapeHtml(n.load || '')}</td>
+            </tr>`;
+        }).join('')}</tbody>
+    </table>`;
+}
+
+function renderEsIndices(indices) {
+    const body = document.getElementById('es-indices-body');
+    const count = document.getElementById('es-indices-count');
+    const options = document.getElementById('es-index-options');
+    count.className = 'badge bg-info ms-2';
+    count.textContent = indices.length;
+    options.innerHTML = indices.map((i) => `<option value="${escapeHtml(i.name || '')}"></option>`).join('');
+
+    if (!indices.length) {
+        body.innerHTML = '<p class="text-muted p-3 mb-0">暂无索引信息</p>';
+        return;
+    }
+
+    body.innerHTML = `<div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+            <thead><tr><th>名称</th><th>健康</th><th>状态</th><th>文档数</th><th>大小</th><th>主分片</th><th>副本</th></tr></thead>
+            <tbody>${indices.map((i) => `<tr>
+                <td><code>${escapeHtml(i.name || '')}</code></td>
+                <td>${healthBadge(i.health || 'unknown')}</td>
+                <td>${escapeHtml(i.status || '')}</td>
+                <td>${escapeHtml(String(i.docs_count || 0))}</td>
+                <td>${escapeHtml(i.store_size || '')}</td>
+                <td>${escapeHtml(String(i.primaries || 0))}</td>
+                <td>${escapeHtml(String(i.replicas || 0))}</td>
+            </tr>`).join('')}</tbody>
+        </table>
+    </div>`;
+}
+
+function setEsSearchEnabled(enabled) {
+    ['es-search-index', 'es-search-query', 'es-search-size', 'es-search-submit'].forEach((id) => {
+        document.getElementById(id).disabled = !enabled;
+    });
+    document.getElementById('es-search-status').textContent = enabled
+        ? '输入索引后可查询文档，查询语句留空时返回最新文档。'
+        : '连接成功后可查询文档。';
+}
+
+async function loadEsDetails() {
+    setEsLazyMessage('正在加载明细...');
+    const [health, nodes, indices] = await Promise.all([
+        fetch(`${BASE_URL}/elasticsearch/api/health`).then((r) => r.json()),
+        fetch(`${BASE_URL}/elasticsearch/api/nodes`).then((r) => r.json()),
+        fetch(`${BASE_URL}/elasticsearch/api/indices`).then((r) => r.json()),
+    ]);
+    renderEsHealth(health);
+    renderEsNodes(nodes);
+    renderEsIndices(indices);
+    setEsSearchEnabled(true);
+}
+
 (() => {
     const form = document.getElementById('es-search-form');
     if (!form) {
@@ -264,6 +282,23 @@
         statusEl.className = 'small text-muted mt-3';
         statusEl.textContent = `共命中 ${data.total || 0} 条，显示 ${data.hits.length} 条`;
         renderHits(data.hits || []);
+    });
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        try {
+            const status = await fetch(`${BASE_URL}/elasticsearch/api/status`).then((r) => r.json());
+            renderEsStatus(status);
+            if (status.connected) {
+                await loadEsDetails();
+            } else {
+                setEsLazyMessage('未连接，暂不加载明细');
+                setEsSearchEnabled(false);
+            }
+        } catch (err) {
+            document.getElementById('es-status-body').innerHTML = `<p class="text-danger mb-0">加载失败: ${escapeHtml(String(err))}</p>`;
+            setEsLazyMessage('加载失败');
+            setEsSearchEnabled(false);
+        }
     });
 })();
 </script>

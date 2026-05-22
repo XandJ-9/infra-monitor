@@ -9,6 +9,7 @@ from app.services.file_service import (
     FileBrowserError,
     FileBrowserService,
     FileNotFoundErrorInRoot,
+    PROJECT_ROOT,
 )
 
 
@@ -37,6 +38,36 @@ def test_list_root_and_subdirectory(tmp_path) -> None:
     assert sub_listing["path"] == "logs"
     assert sub_listing["parent_path"] == ""
     assert sub_listing["entries"][0]["path"] == "logs/app.log"
+
+
+def test_default_root_is_project_root() -> None:
+    service = FileBrowserService({"file_browser": {"max_preview_bytes": 16, "enabled": True}})
+
+    assert service.root == PROJECT_ROOT
+
+
+def test_root_override_changes_browsing_boundary(tmp_path) -> None:
+    configured_root = tmp_path / "configured"
+    override_root = tmp_path / "override"
+    configured_root.mkdir()
+    override_root.mkdir()
+    (configured_root / "configured.txt").write_text("configured", encoding="utf-8")
+    (override_root / "override.txt").write_text("override", encoding="utf-8")
+
+    service = FileBrowserService(
+        {
+            "file_browser": {
+                "root": str(configured_root),
+                "max_preview_bytes": 16,
+                "enabled": True,
+            }
+        },
+        root=override_root,
+    )
+    listing = service.list_dir("")
+
+    assert service.root == override_root.resolve()
+    assert [entry["name"] for entry in listing["entries"]] == ["override.txt"]
 
 
 def test_path_traversal_is_rejected(tmp_path) -> None:

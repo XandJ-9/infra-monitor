@@ -21,9 +21,9 @@ def _service_response(call):
 
 
 @router.get("/", response_class=HTMLResponse)
-async def files_page(request: Request, path: str = Query(default="")):
+async def files_page(request: Request, path: str = Query(default=""), root: str = Query(default="")):
     """Render the read-only file browser page."""
-    service = FileBrowserService()
+    service = FileBrowserService(root=root or None)
     error = ""
     listing = {"path": path, "parent_path": None, "entries": [], "root": str(service.root)}
     try:
@@ -44,14 +44,14 @@ async def files_page(request: Request, path: str = Query(default="")):
 
 
 @router.get("/api/list")
-async def list_files(path: str = Query(default="")):
-    """Return directory entries under the configured root."""
-    service = FileBrowserService()
+async def list_files(path: str = Query(default=""), root: str = Query(default="")):
+    """Return directory entries under the selected root."""
+    service = FileBrowserService(root=root or None)
     return _service_response(lambda: service.list_dir(path))
 
 
 @router.get("/api/preview")
-async def preview_file(path: str = Query(default="")):
+async def preview_file(path: str = Query(default=""), root: str = Query(default="")):
     """Return a bounded text preview for a file."""
-    service = FileBrowserService()
+    service = FileBrowserService(root=root or None)
     return _service_response(lambda: service.preview_file(path))

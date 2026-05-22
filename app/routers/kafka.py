@@ -6,8 +6,6 @@ Kafka 监控路由
 
 from __future__ import annotations
 
-import asyncio
-
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
@@ -21,25 +19,10 @@ router = APIRouter(prefix="/kafka", tags=["Kafka"])
 @router.get("/", response_class=HTMLResponse)
 async def kafka_page(request: Request):
     """Kafka 监控页面"""
-    kafka = KafkaService()
-    status, brokers, topics, consumer_groups = await asyncio.gather(
-        sync_with_timeout(
-            kafka.get_status,
-            fallback=ComponentStatus(name="Kafka", connected=False, error="连接超时"),
-        ),
-        sync_with_timeout(kafka.get_brokers, fallback=[]),
-        sync_with_timeout(kafka.get_topics, fallback=[]),
-        sync_with_timeout(kafka.get_consumer_groups, fallback=[]),
-    )
-
     return request.app.state.templates.TemplateResponse(
         request,
-        "kafka.html", {
-            "status": status,
-            "brokers": brokers,
-            "topics": topics,
-            "consumer_groups": consumer_groups,
-        }
+        "kafka.html",
+        {},
     )
 
 

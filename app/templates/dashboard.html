@@ -19,18 +19,13 @@
         <div class="card component-card h-100" data-component="zookeeper">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-tree"></i> ZooKeeper</span>
-                <span class="status-dot {% if zk_status.connected %}status-ok{% else %}status-error{% endif %}"></span>
+                <span class="status-dot status-loading"></span>
             </div>
             <div class="card-body component-card-body">
-                {% if zk_status.connected %}
-                    <p class="mb-1"><strong>集群：</strong>{{ zk_status.cluster or '已连接' }}</p>
-                    <p class="mb-1"><strong>版本：</strong>{{ zk_status.version or '-' }}</p>
-                    {% for key, val in zk_status.metrics.items() %}
-                    <p class="mb-1 small text-muted">{{ key }}: {{ val }}</p>
-                    {% endfor %}
-                {% else %}
-                    <p class="text-danger">{{ zk_status.error or '未连接' }}</p>
-                {% endif %}
+                <p class="text-muted mb-0">
+                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                    正在加载连接状态...
+                </p>
             </div>
             <div class="card-footer text-center">
                 <a href="{{ root_path }}/zookeeper/" class="btn btn-sm btn-outline-primary">查看详情</a>
@@ -43,18 +38,13 @@
         <div class="card component-card h-100" data-component="kafka">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-lightning"></i> Kafka</span>
-                <span class="status-dot {% if kafka_status.connected %}status-ok{% else %}status-error{% endif %}"></span>
+                <span class="status-dot status-loading"></span>
             </div>
             <div class="card-body component-card-body">
-                {% if kafka_status.connected %}
-                    <p class="mb-1"><strong>集群：</strong>{{ kafka_status.cluster or '已连接' }}</p>
-                    <p class="mb-1"><strong>版本：</strong>{{ kafka_status.version or '-' }}</p>
-                    {% for key, val in kafka_status.metrics.items() %}
-                    <p class="mb-1 small text-muted">{{ key }}: {{ val }}</p>
-                    {% endfor %}
-                {% else %}
-                    <p class="text-danger">{{ kafka_status.error or '未连接' }}</p>
-                {% endif %}
+                <p class="text-muted mb-0">
+                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                    正在加载连接状态...
+                </p>
             </div>
             <div class="card-footer text-center">
                 <a href="{{ root_path }}/kafka/" class="btn btn-sm btn-outline-primary">查看详情</a>
@@ -67,24 +57,13 @@
         <div class="card component-card h-100" data-component="elasticsearch">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-search"></i> Elasticsearch</span>
-                <span class="status-dot {% if es_status.connected %}status-ok{% else %}status-error{% endif %}"></span>
+                <span class="status-dot status-loading"></span>
             </div>
             <div class="card-body component-card-body">
-                {% if es_status.connected %}
-                    <p class="mb-1"><strong>集群：</strong>{{ es_status.cluster or '已连接' }}</p>
-                    <p class="mb-1"><strong>版本：</strong>{{ es_status.version or '-' }}</p>
-                    {% for key, val in es_status.metrics.items() %}
-                    <p class="mb-1 small text-muted">
-                        {% if key == 'status' %}
-                            <span class="badge bg-{{ 'success' if val == 'green' else 'warning' if val == 'yellow' else 'danger' }}">{{ val }}</span>
-                        {% else %}
-                            {{ key }}: {{ val }}
-                        {% endif %}
-                    </p>
-                    {% endfor %}
-                {% else %}
-                    <p class="text-danger">{{ es_status.error or '未连接' }}</p>
-                {% endif %}
+                <p class="text-muted mb-0">
+                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                    正在加载连接状态...
+                </p>
             </div>
             <div class="card-footer text-center">
                 <a href="{{ root_path }}/elasticsearch/" class="btn btn-sm btn-outline-primary">查看详情</a>
@@ -99,6 +78,7 @@
 // 自动刷新
 let refreshInterval = {{ refresh_interval }};
 let refreshTimer = setInterval(refreshDashboard, refreshInterval * 1000);
+document.addEventListener('DOMContentLoaded', refreshDashboard);
 
 function refreshDashboard() {
     fetch(BASE_URL + '/api/dashboard/status')
@@ -126,6 +106,7 @@ function updateCard(component, info) {
     if (dot) {
         dot.classList.toggle('status-ok', Boolean(info.connected));
         dot.classList.toggle('status-error', !info.connected);
+        dot.classList.remove('status-loading');
     }
 
     const body = card.querySelector('.component-card-body');

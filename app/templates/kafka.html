@@ -8,49 +8,24 @@
 <div class="card mb-3">
     <div class="card-header d-flex justify-content-between align-items-center">
         <span>集群状态</span>
-        {% if status.connected %}
-            <span class="badge bg-success">已连接</span>
-        {% else %}
-            <span class="badge bg-danger">未连接</span>
-        {% endif %}
+        <span id="kafka-status-badge" class="badge bg-secondary">加载中</span>
     </div>
-    <div class="card-body">
-        {% if status.connected %}
-            <p class="mb-1"><strong>集群：</strong>{{ status.cluster or '已连接' }}</p>
-            <p class="mb-1"><strong>版本：</strong>{{ status.version or '-' }}</p>
-            {% for key, val in status.metrics.items() %}
-            <p class="mb-1"><strong>{{ key }}：</strong>{{ val }}</p>
-            {% endfor %}
-        {% else %}
-            <p class="text-danger">{{ status.error or '未连接' }}</p>
-        {% endif %}
+    <div id="kafka-status-body" class="card-body">
+        <p class="text-muted mb-0">
+            <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+            正在加载连接状态...
+        </p>
     </div>
 </div>
 
-{% if status.connected %}
 <!-- Broker 列表 -->
 <div class="card mb-3">
     <div class="card-header">
         <i class="bi bi-hdd-network"></i> Broker 列表
-        <span class="badge bg-info ms-2">{{ brokers|length }}</span>
+        <span id="kafka-brokers-count" class="badge bg-secondary ms-2">-</span>
     </div>
-    <div class="card-body p-0">
-        {% if brokers %}
-        <table class="table table-sm table-hover mb-0">
-            <thead><tr><th>Broker ID</th><th>Host</th><th>Port</th></tr></thead>
-            <tbody>
-                {% for b in brokers %}
-                <tr>
-                    <td><span class="badge bg-primary">{{ b.broker_id }}</span></td>
-                    <td>{{ b.host }}</td>
-                    <td>{{ b.port }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <p class="text-muted p-3 mb-0">暂无 Broker 信息</p>
-        {% endif %}
+    <div id="kafka-brokers-body" class="card-body p-0">
+        <p class="text-muted p-3 mb-0">连接状态确认后加载 Broker 信息</p>
     </div>
 </div>
 
@@ -58,25 +33,10 @@
 <div class="card mb-3">
     <div class="card-header">
         <i class="bi bi-list-columns"></i> Topic 列表
-        <span class="badge bg-info ms-2">{{ topics|length }}</span>
+        <span id="kafka-topics-count" class="badge bg-secondary ms-2">-</span>
     </div>
-    <div class="card-body p-0">
-        {% if topics %}
-        <table class="table table-sm table-hover mb-0">
-            <thead><tr><th>名称</th><th>分区数</th><th>副本数</th></tr></thead>
-            <tbody>
-                {% for t in topics %}
-                <tr>
-                    <td><code>{{ t.name }}</code></td>
-                    <td>{{ t.partitions }}</td>
-                    <td>{{ t.replicas }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <p class="text-muted p-3 mb-0">暂无 Topic 信息</p>
-        {% endif %}
+    <div id="kafka-topics-body" class="card-body p-0">
+        <p class="text-muted p-3 mb-0">连接状态确认后加载 Topic 信息</p>
     </div>
 </div>
 
@@ -84,33 +44,103 @@
 <div class="card mb-3">
     <div class="card-header">
         <i class="bi bi-people"></i> Consumer Group 列表
-        <span class="badge bg-info ms-2">{{ consumer_groups|length }}</span>
+        <span id="kafka-groups-count" class="badge bg-secondary ms-2">-</span>
     </div>
-    <div class="card-body p-0">
-        {% if consumer_groups %}
-        <table class="table table-sm table-hover mb-0">
-            <thead><tr><th>Group ID</th><th>成员数</th><th>订阅 Topic</th><th>Lag</th></tr></thead>
-            <tbody>
-                {% for g in consumer_groups %}
-                <tr>
-                    <td><code>{{ g.group_id }}</code></td>
-                    <td>{{ g.members }}</td>
-                    <td>{{ g.topics|join(', ') or '-' }}</td>
-                    <td>
-                        {% if g.lag > 0 %}
-                            <span class="badge bg-warning">{{ g.lag }}</span>
-                        {% else %}
-                            {{ g.lag }}
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <p class="text-muted p-3 mb-0">暂无 Consumer Group 信息</p>
-        {% endif %}
+    <div id="kafka-groups-body" class="card-body p-0">
+        <p class="text-muted p-3 mb-0">连接状态确认后加载 Consumer Group 信息</p>
     </div>
 </div>
-{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function renderKafkaStatus(info) {
+    const badge = document.getElementById('kafka-status-badge');
+    const body = document.getElementById('kafka-status-body');
+    badge.className = `badge ${info.connected ? 'bg-success' : 'bg-danger'}`;
+    badge.textContent = info.connected ? '已连接' : '未连接';
+
+    if (!info.connected) {
+        body.innerHTML = `<p class="text-danger mb-0">${escapeHtml(info.error || '未连接')}</p>`;
+        return;
+    }
+
+    const rows = [
+        `<p class="mb-1"><strong>集群：</strong>${escapeHtml(info.cluster || '已连接')}</p>`,
+        `<p class="mb-1"><strong>版本：</strong>${escapeHtml(info.version || '-')}</p>`,
+    ];
+    Object.entries(info.metrics || {}).forEach(([key, value]) => {
+        rows.push(`<p class="mb-1"><strong>${escapeHtml(key)}：</strong>${escapeHtml(String(value))}</p>`);
+    });
+    body.innerHTML = rows.join('');
+}
+
+function renderKafkaTable(bodyId, countId, rows, emptyText, columns, rowRenderer) {
+    const body = document.getElementById(bodyId);
+    const count = document.getElementById(countId);
+    count.className = 'badge bg-info ms-2';
+    count.textContent = rows.length;
+
+    if (!rows.length) {
+        body.innerHTML = `<p class="text-muted p-3 mb-0">${emptyText}</p>`;
+        return;
+    }
+
+    body.innerHTML = `<table class="table table-sm table-hover mb-0">
+        <thead><tr>${columns.map((name) => `<th>${name}</th>`).join('')}</tr></thead>
+        <tbody>${rows.map(rowRenderer).join('')}</tbody>
+    </table>`;
+}
+
+function setKafkaDetailsMessage(message) {
+    [
+        ['kafka-brokers-body', 'kafka-brokers-count'],
+        ['kafka-topics-body', 'kafka-topics-count'],
+        ['kafka-groups-body', 'kafka-groups-count'],
+    ].forEach(([bodyId, countId]) => {
+        document.getElementById(bodyId).innerHTML = `<p class="text-muted p-3 mb-0">${message}</p>`;
+        document.getElementById(countId).textContent = '-';
+    });
+}
+
+async function loadKafkaDetails() {
+    setKafkaDetailsMessage('正在加载明细...');
+    const [brokers, topics, groups] = await Promise.all([
+        fetch(`${BASE_URL}/kafka/api/brokers`).then((r) => r.json()),
+        fetch(`${BASE_URL}/kafka/api/topics`).then((r) => r.json()),
+        fetch(`${BASE_URL}/kafka/api/consumer-groups`).then((r) => r.json()),
+    ]);
+
+    renderKafkaTable('kafka-brokers-body', 'kafka-brokers-count', brokers, '暂无 Broker 信息',
+        ['Broker ID', 'Host', 'Port'],
+        (b) => `<tr><td><span class="badge bg-primary">${escapeHtml(String(b.broker_id))}</span></td><td>${escapeHtml(b.host || '')}</td><td>${escapeHtml(String(b.port || ''))}</td></tr>`);
+    renderKafkaTable('kafka-topics-body', 'kafka-topics-count', topics, '暂无 Topic 信息',
+        ['名称', '分区数', '副本数'],
+        (t) => `<tr><td><code>${escapeHtml(t.name || '')}</code></td><td>${escapeHtml(String(t.partitions || 0))}</td><td>${escapeHtml(String(t.replicas || 0))}</td></tr>`);
+    renderKafkaTable('kafka-groups-body', 'kafka-groups-count', groups, '暂无 Consumer Group 信息',
+        ['Group ID', '成员数', '订阅 Topic', 'Lag'],
+        (g) => {
+            const lag = Number(g.lag || 0);
+            const lagHtml = lag > 0 ? `<span class="badge bg-warning">${lag}</span>` : escapeHtml(String(lag));
+            return `<tr><td><code>${escapeHtml(g.group_id || '')}</code></td><td>${escapeHtml(String(g.members || 0))}</td><td>${escapeHtml((g.topics || []).join(', ') || '-')}</td><td>${lagHtml}</td></tr>`;
+        });
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+    try {
+        const status = await fetch(`${BASE_URL}/kafka/api/status`).then((r) => r.json());
+        renderKafkaStatus(status);
+        if (status.connected) {
+            await loadKafkaDetails();
+        } else {
+            setKafkaDetailsMessage('未连接，暂不加载明细');
+        }
+    } catch (err) {
+        document.getElementById('kafka-status-badge').className = 'badge bg-danger';
+        document.getElementById('kafka-status-badge').textContent = '加载失败';
+        document.getElementById('kafka-status-body').innerHTML = `<p class="text-danger mb-0">加载失败: ${escapeHtml(String(err))}</p>`;
+        setKafkaDetailsMessage('加载失败');
+    }
+});
+</script>
 {% endblock %}
