@@ -11,7 +11,8 @@ Infra Monitor 采用轻量级 Web 应用结构，目标是在可信内网环境�
 - ZooKeeper：通过 `kazoo` 维护连接并读取节点、状态和树结构。
 - Kafka：当前通过 ZooKeeper 元数据读取 broker、topic 和旧版 consumer group 信息。
 - Elasticsearch：通过 `httpx` 调用 HTTP API 获取健康、节点、索引信息。
-- 文件浏览器：通过本地文件服务层实现只读目录列表和文本预览。
+- 文件浏览器：通过本地文件服务层实现只读目录列表、文本预览和图片预览。
+- 代码预览：文件浏览器对 Python、SQL、Bash 和 JSON 文本文件提供基础语法高亮。
 - 配置：使用 `config.json` 持久化，Web 配置页可修改运行参数。
 
 ## 分层职责
@@ -119,11 +120,17 @@ infra-monitor/
 |------|------|------|
 | GET | `/files/` | 文件浏览器页面 |
 | GET | `/files/api/list?path=...` | 目录列表 |
-| GET | `/files/api/preview?path=...` | 文件预览 |
+| GET | `/files/api/preview?path=...` | 文件预览元信息 |
+| GET | `/files/api/image?path=...` | 图片文件预览 |
+
+文件浏览器页面提供目录进入、返回上级、刷新、根目录输入、文件预览和左右分栏拖拽。文件列表展示名称、类型、大小、修改时间；预览区支持文本内容、Python/SQL/Bash/JSON 基础语法高亮，以及 PNG、JPEG、GIF、WebP、AVIF、APNG、SVG 图片内联预览。文本预览受 `file_browser.max_preview_bytes` 限制，超过上限时只返回截断内容并提示。
+
+文件浏览器默认使用 `config.json` 中的 `file_browser.root` 作为访问根目录，也支持在页面和 API 中通过 `root` query 参数临时切换根目录。后端统一通过 `FileBrowserService` 做真实路径解析和边界校验。
 
 ## 关键约束
 
 1. Kafka 当前主要通过 ZooKeeper 读取元数据，现代 Kafka consumer group 和 lag 需要后续引入 Kafka AdminClient。
 2. Elasticsearch 通过 HTTP API 获取数据，连接失败应返回可展示的错误状态。
-3. 文件浏览器必须保持只读，并通过真实路径校验限制在配置的根目录内。
-4. 外部组件异常、超时或未启动时，页面应优雅降级。
+3. 文件浏览器必须保持只读，不提供编辑、上传、删除、重命名、移动或下载能力。
+4. 文件浏览器必须通过真实路径校验限制在选定根目录内，并拒绝绝对路径、`../` 路径穿越和指向根目录外的符号链接。
+5. 外部组件异常、超时或未启动时，页面应优雅降级。

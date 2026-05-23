@@ -126,6 +126,37 @@ def test_preview_utf8_text_and_truncation(tmp_path) -> None:
     assert preview["content"] == "01234567"
     assert preview["encoding"] == "utf-8"
     assert preview["truncated"] is True
+    assert preview["language"] == ""
+
+
+def test_preview_marks_code_languages(tmp_path) -> None:
+    (tmp_path / ".bashrc").write_text("export APP_ENV=dev\n", encoding="utf-8")
+    (tmp_path / "config.json").write_text('{"enabled": true}\n', encoding="utf-8")
+    (tmp_path / "deploy.sh").write_text("#!/usr/bin/env bash\necho hello\n", encoding="utf-8")
+    (tmp_path / "script.py").write_text("def hello():\n    return 1\n", encoding="utf-8")
+    (tmp_path / "query.sql").write_text("select * from users;\n", encoding="utf-8")
+    service = make_service(tmp_path)
+
+    listing = service.list_dir("")
+    bash_preview = service.preview_file("deploy.sh")
+    bashrc_preview = service.preview_file(".bashrc")
+    json_preview = service.preview_file("config.json")
+    python_preview = service.preview_file("script.py")
+    sql_preview = service.preview_file("query.sql")
+
+    entries = {entry["name"]: entry for entry in listing["entries"]}
+    assert entries[".bashrc"]["language"] == "bash"
+    assert entries["config.json"]["language"] == "json"
+    assert entries["deploy.sh"]["language"] == "bash"
+    assert entries["script.py"]["language"] == "python"
+    assert entries["query.sql"]["language"] == "sql"
+    assert bash_preview["language"] == "bash"
+    assert bashrc_preview["language"] == "bash"
+    assert json_preview["language"] == "json"
+    assert python_preview["preview_type"] == "text"
+    assert python_preview["language"] == "python"
+    assert sql_preview["preview_type"] == "text"
+    assert sql_preview["language"] == "sql"
 
 
 def test_missing_path_and_type_mismatch_errors(tmp_path) -> None:
@@ -150,3 +181,24 @@ def test_binary_file_is_not_previewed(tmp_path) -> None:
     assert preview["previewable"] is False
     assert preview["content"] == ""
     assert "Binary" in preview["error"]
+
+
+def test_image_file_preview_metadata_and_validation(tmp_path) -> None:
+    (tmp_path / "image.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    (tmp_path / "note.txt").write_text("hello", encoding="utf-8")
+    service = make_service(tmp_path)
+
+    listing = service.list_dir("")
+    preview = service.preview_file("image.png")
+    image_path, media_type = service.image_file("image.png")
+
+    assert next(entry for entry in listing["entries"] if entry["name"] == "image.png")["preview_type"] == "image"
+    assert preview["previewable"] is True
+    assert preview["preview_type"] == "image"
+    assert preview["mime_type"] == "image/png"
+    assert preview["content"] == ""
+    assert image_path == tmp_path / "image.png"
+    assert media_type == "image/png"
+
+    with pytest.raises(FileBrowserError, match="supported image"):
+        service.image_file("note.txt")

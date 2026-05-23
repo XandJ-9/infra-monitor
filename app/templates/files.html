@@ -144,6 +144,58 @@ body.file-browser-resizing {
     min-height: 0;
     overflow: auto;
     white-space: pre-wrap;
+    tab-size: 4;
+}
+
+.file-preview-code {
+    color: #1f2328;
+    line-height: 1.45;
+}
+
+.syntax-keyword {
+    color: #cf222e;
+    font-weight: 600;
+}
+
+.syntax-string {
+    color: #0a3069;
+}
+
+.syntax-comment {
+    color: #6e7781;
+    font-style: italic;
+}
+
+.syntax-number {
+    color: #0550ae;
+}
+
+.syntax-decorator {
+    color: #8250df;
+}
+
+.syntax-function {
+    color: #6639ba;
+}
+
+.syntax-operator {
+    color: #953800;
+}
+
+.file-preview-image-wrap {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    align-items: center;
+    justify-content: center;
+    overflow: auto;
+    background: #f8f9fa;
+}
+
+.file-preview-image {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
 }
 
 @media (max-width: 991.98px) {
@@ -226,7 +278,7 @@ body.file-browser-resizing {
                                 </a>
                                 {% else %}
                                 <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none file-preview-link file-entry-link" data-path="{{ entry.path }}" title="{{ entry.name }}">
-                                    <i class="bi bi-file-earmark-text flex-shrink-0"></i>
+                                    <i class="bi {{ 'bi-file-earmark-image' if entry.preview_type == 'image' else 'bi-file-earmark-text' }} flex-shrink-0"></i>
                                     <span class="file-entry-name">{{ entry.name }}</span>
                                 </button>
                                 {% endif %}
@@ -264,6 +316,9 @@ body.file-browser-resizing {
                 <div id="preview-meta" class="text-muted small mb-2">选择左侧文件查看内容。</div>
                 <div id="preview-alert"></div>
                 <pre id="preview-content" class="bg-light border rounded p-3 mb-0 d-none"></pre>
+                <div id="preview-image-wrap" class="file-preview-image-wrap border rounded d-none">
+                    <img id="preview-image" class="file-preview-image" alt="">
+                </div>
             </div>
         </div>
     </div>
@@ -390,12 +445,19 @@ function previewFile(path) {
     const meta = document.getElementById('preview-meta');
     const alertBox = document.getElementById('preview-alert');
     const content = document.getElementById('preview-content');
+    const imageWrap = document.getElementById('preview-image-wrap');
+    const image = document.getElementById('preview-image');
 
     title.textContent = path;
     meta.textContent = '读取中...';
     alertBox.innerHTML = '';
     content.classList.add('d-none');
     content.textContent = '';
+    content.innerHTML = '';
+    content.className = 'bg-light border rounded p-3 mb-0 d-none';
+    imageWrap.classList.add('d-none');
+    image.removeAttribute('src');
+    image.alt = '';
 
     const params = new URLSearchParams({path, root: FILE_BROWSER_ROOT});
     fetch(`${BASE_URL}/files/api/preview?${params.toString()}`)
@@ -414,16 +476,165 @@ function previewFile(path) {
                 alertBox.innerHTML = `<div class="alert alert-warning">${escapeHtml(data.error || '该文件不可预览。')}</div>`;
                 return;
             }
+            if (data.preview_type === 'image') {
+                const imageParams = new URLSearchParams({path: data.path, root: FILE_BROWSER_ROOT});
+                image.src = `${BASE_URL}/files/api/image?${imageParams.toString()}`;
+                image.alt = data.name;
+                imageWrap.classList.remove('d-none');
+                return;
+            }
             if (data.truncated) {
                 alertBox.innerHTML = '<div class="alert alert-info">内容已按配置上限截断。</div>';
             }
-            content.textContent = data.content || '';
+            if (['bash', 'json', 'python', 'sql'].includes(data.language)) {
+                content.innerHTML = highlightCode(data.content || '', data.language);
+                content.classList.add('file-preview-code', `language-${data.language}`);
+            } else {
+                content.textContent = data.content || '';
+            }
             content.classList.remove('d-none');
         })
         .catch((error) => {
             meta.textContent = '';
             alertBox.innerHTML = `<div class="alert alert-danger">${escapeHtml(error.message)}</div>`;
         });
+}
+
+function highlightCode(source, language) {
+    if (language === 'bash') {
+        return highlightBash(source);
+    }
+    if (language === 'json') {
+        return highlightJson(source);
+    }
+    if (language === 'python') {
+        return highlightPython(source);
+    }
+    if (language === 'sql') {
+        return highlightSql(source);
+    }
+    return escapeHtml(source);
+}
+
+function highlightBash(source) {
+    const keywords = new Set([
+        'case', 'do', 'done', 'elif', 'else', 'esac', 'fi', 'for', 'function', 'if', 'in',
+        'select', 'then', 'until', 'while',
+    ]);
+    const builtins = new Set([
+        'alias', 'bg', 'cd', 'command', 'declare', 'echo', 'eval', 'exec', 'exit', 'export',
+        'fg', 'getopts', 'jobs', 'local', 'printf', 'pwd', 'read', 'readonly', 'return',
+        'set', 'shift', 'source', 'test', 'trap', 'type', 'ulimit', 'umask', 'unalias',
+        'unset',
+    ]);
+    const tokenPattern = /(#.*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\$\{?[A-Za-z_][\w]*\}?|\b[A-Za-z_][\w-]*\b|\b\d+(?:\.\d+)?\b|[|&;(){}[\]=<>+-])/g;
+    return source.replace(tokenPattern, (token) => {
+        if (token.startsWith('#')) {
+            return syntaxSpan('comment', token);
+        }
+        if (token.startsWith("'") || token.startsWith('"')) {
+            return syntaxSpan('string', token);
+        }
+        if (token.startsWith('$')) {
+            return syntaxSpan('decorator', token);
+        }
+        if (keywords.has(token)) {
+            return syntaxSpan('keyword', token);
+        }
+        if (builtins.has(token)) {
+            return syntaxSpan('function', token);
+        }
+        if (/^\d/.test(token)) {
+            return syntaxSpan('number', token);
+        }
+        if (/^[|&;(){}[\]=<>+-]$/.test(token)) {
+            return syntaxSpan('operator', token);
+        }
+        return escapeHtml(token);
+    });
+}
+
+function highlightJson(source) {
+    const tokenPattern = /("(?:\\.|[^"\\])*"(?=\s*:)|"(?:\\.|[^"\\])*"|\btrue\b|\bfalse\b|\bnull\b|-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b|[{}[\]:,])/g;
+    return source.replace(tokenPattern, (token, offset) => {
+        if (/^"/.test(token)) {
+            const nextText = source.slice(offset + token.length);
+            return syntaxSpan(/^\s*:/.test(nextText) ? 'function' : 'string', token);
+        }
+        if (/^(true|false|null)$/.test(token)) {
+            return syntaxSpan('keyword', token);
+        }
+        if (/^-?\d/.test(token)) {
+            return syntaxSpan('number', token);
+        }
+        return syntaxSpan('operator', token);
+    });
+}
+
+function highlightPython(source) {
+    const keywords = new Set([
+        'False', 'None', 'True', 'and', 'as', 'assert', 'async', 'await', 'break', 'class',
+        'continue', 'def', 'del', 'elif', 'else', 'except', 'finally', 'for', 'from', 'global',
+        'if', 'import', 'in', 'is', 'lambda', 'nonlocal', 'not', 'or', 'pass', 'raise', 'return',
+        'try', 'while', 'with', 'yield',
+    ]);
+    const tokenPattern = /(#.*|(?:[rubfRUBF]{0,2})(?:"""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|\b[A-Za-z_][\w]*\b|\b\d+(?:\.\d+)?\b|@[A-Za-z_][\w.]*)/g;
+    return source.replace(tokenPattern, (token) => {
+        if (token.startsWith('#')) {
+            return syntaxSpan('comment', token);
+        }
+        if (token.startsWith('@')) {
+            return syntaxSpan('decorator', token);
+        }
+        if (/^(?:[rubfRUBF]{0,2})(?:["'])/.test(token)) {
+            return syntaxSpan('string', token);
+        }
+        if (keywords.has(token)) {
+            return syntaxSpan('keyword', token);
+        }
+        if (/^\d/.test(token)) {
+            return syntaxSpan('number', token);
+        }
+        return escapeHtml(token);
+    });
+}
+
+function highlightSql(source) {
+    const keywords = new Set([
+        'ADD', 'ALTER', 'AND', 'AS', 'ASC', 'BETWEEN', 'BY', 'CASE', 'CREATE', 'DELETE', 'DESC',
+        'DISTINCT', 'DROP', 'ELSE', 'END', 'EXISTS', 'FROM', 'FULL', 'GROUP', 'HAVING', 'IN',
+        'INNER', 'INSERT', 'INTO', 'IS', 'JOIN', 'LEFT', 'LIKE', 'LIMIT', 'NOT', 'NULL', 'ON',
+        'OR', 'ORDER', 'OUTER', 'RIGHT', 'SELECT', 'SET', 'TABLE', 'THEN', 'UNION', 'UPDATE',
+        'VALUES', 'WHEN', 'WHERE',
+    ]);
+    const functions = new Set(['AVG', 'COALESCE', 'COUNT', 'LOWER', 'MAX', 'MIN', 'NOW', 'SUM', 'UPPER']);
+    const tokenPattern = /(--.*|\/\*[\s\S]*?\*\/|'(?:''|[^'])*'|"(?:\\"|[^"])*"|\b[A-Za-z_][\w]*\b|\b\d+(?:\.\d+)?\b|[(),.;=*<>+-])/g;
+    return source.replace(tokenPattern, (token) => {
+        const upper = token.toUpperCase();
+        if (token.startsWith('--') || token.startsWith('/*')) {
+            return syntaxSpan('comment', token);
+        }
+        if (token.startsWith("'") || token.startsWith('"')) {
+            return syntaxSpan('string', token);
+        }
+        if (keywords.has(upper)) {
+            return syntaxSpan('keyword', token);
+        }
+        if (functions.has(upper)) {
+            return syntaxSpan('function', token);
+        }
+        if (/^\d/.test(token)) {
+            return syntaxSpan('number', token);
+        }
+        if (/^[(),.;=*<>+-]$/.test(token)) {
+            return syntaxSpan('operator', token);
+        }
+        return escapeHtml(token);
+    });
+}
+
+function syntaxSpan(kind, token) {
+    return `<span class="syntax-${kind}">${escapeHtml(token)}</span>`;
 }
 </script>
 {% endblock %}

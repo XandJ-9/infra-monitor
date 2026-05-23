@@ -11,6 +11,30 @@ from typing import Any
 from app.config import load_config
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+IMAGE_MIME_TYPES = {
+    ".apng": "image/apng",
+    ".avif": "image/avif",
+    ".gif": "image/gif",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".svg": "image/svg+xml",
+    ".webp": "image/webp",
+}
+CODE_LANGUAGES = {
+    ".bash": "bash",
+    ".json": "json",
+    ".py": "python",
+    ".pyw": "python",
+    ".sh": "bash",
+    ".sql": "sql",
+}
+CODE_FILENAMES = {
+    ".bashrc": "bash",
+    ".bash_profile": "bash",
+    ".env": "bash",
+    ".profile": "bash",
+}
 
 
 class FileBrowserError(Exception):
@@ -85,6 +109,20 @@ class FileBrowserService:
             raise FileBrowserError("Path is not a file")
 
         stat = target.stat()
+        image_mime_type = self.image_mime_type(target)
+        if image_mime_type:
+            return self._preview_payload(
+                target,
+                stat,
+                content="",
+                encoding="",
+                truncated=False,
+                previewable=True,
+                error="",
+                preview_type="image",
+                mime_type=image_mime_type,
+            )
+
         read_limit = max(0, self.max_preview_bytes)
         with target.open("rb") as file:
             raw = file.read(read_limit + 1)
@@ -100,6 +138,8 @@ class FileBrowserService:
                 truncated=truncated,
                 previewable=False,
                 error="Binary file preview is not supported.",
+                preview_type="unsupported",
+                mime_type="",
             )
 
         encoding = "utf-8"
@@ -117,7 +157,33 @@ class FileBrowserService:
             truncated=truncated,
             previewable=True,
             error="",
+            preview_type="text",
+            mime_type="text/plain",
+            language=self.code_language(target),
         )
+
+    def image_file(self, relative_path: str) -> tuple[Path, str]:
+        """Return a validated image file path and media type."""
+        target = self.resolve_path(relative_path)
+        if not target.exists():
+            raise FileNotFoundErrorInRoot("Path does not exist")
+        if not target.is_file():
+            raise FileBrowserError("Path is not a file")
+
+        mime_type = self.image_mime_type(target)
+        if not mime_type:
+            raise FileBrowserError("Path is not a supported image file")
+        return target, mime_type
+
+    @staticmethod
+    def image_mime_type(path: Path) -> str:
+        """Return the browser-safe image media type for a supported extension."""
+        return IMAGE_MIME_TYPES.get(path.suffix.lower(), "")
+
+    @staticmethod
+    def code_language(path: Path) -> str:
+        """Return the supported syntax language for code previews."""
+        return CODE_FILENAMES.get(path.name.lower(), CODE_LANGUAGES.get(path.suffix.lower(), ""))
 
     def resolve_path(self, relative_path: str = "") -> Path:
         """Resolve a user path and ensure it stays within root."""
@@ -145,6 +211,8 @@ class FileBrowserService:
             "size": None if is_dir else stat_result.st_size,
             "modified": self._format_time(stat_result.st_mtime),
             "extension": "" if is_dir else path.suffix.lower(),
+            "preview_type": "" if is_dir else ("image" if self.image_mime_type(path) else "text"),
+            "language": "" if is_dir else self.code_language(path),
         }
 
     def _preview_payload(
@@ -157,6 +225,9 @@ class FileBrowserService:
         truncated: bool,
         previewable: bool,
         error: str,
+        preview_type: str = "text",
+        mime_type: str = "",
+        language: str = "",
     ) -> dict[str, Any]:
         return {
             "path": self._relative(path),
@@ -168,6 +239,9 @@ class FileBrowserService:
             "truncated": truncated,
             "previewable": previewable,
             "error": error,
+            "preview_type": preview_type,
+            "mime_type": mime_type,
+            "language": language,
         }
 
     def _relative(self, path: Path) -> str:

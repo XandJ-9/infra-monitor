@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 
 from app.services.file_service import FileBrowserError, FileBrowserService
 
@@ -55,3 +55,16 @@ async def preview_file(path: str = Query(default=""), root: str = Query(default=
     """Return a bounded text preview for a file."""
     service = FileBrowserService(root=root or None)
     return _service_response(lambda: service.preview_file(path))
+
+
+@router.get("/api/image")
+async def image_file(path: str = Query(default=""), root: str = Query(default="")):
+    """Return a validated image file for inline browser preview."""
+    service = FileBrowserService(root=root or None)
+    file_path, media_type = _service_response(lambda: service.image_file(path))
+    return FileResponse(
+        file_path,
+        media_type=media_type,
+        filename=file_path.name,
+        content_disposition_type="inline",
+    )

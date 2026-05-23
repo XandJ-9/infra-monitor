@@ -11,6 +11,10 @@ from app.main import app
 def test_files_page_and_apis(tmp_path, monkeypatch) -> None:
     (tmp_path / "subdir").mkdir()
     (tmp_path / "hello.txt").write_text("hello", encoding="utf-8")
+    (tmp_path / "config.json").write_text('{"enabled": true}\n', encoding="utf-8")
+    (tmp_path / "deploy.sh").write_text("#!/usr/bin/env bash\necho hello\n", encoding="utf-8")
+    (tmp_path / "script.py").write_text("def hello():\n    return 1\n", encoding="utf-8")
+    (tmp_path / "image.png").write_bytes(b"\x89PNG\r\n\x1a\n")
     cfg_path = tmp_path / "config.json"
     cfg_path.write_text(
         json.dumps({"file_browser": {"root": str(tmp_path), "max_preview_bytes": 32}}),
@@ -22,14 +26,41 @@ def test_files_page_and_apis(tmp_path, monkeypatch) -> None:
     page = client.get("/files/")
     listing = client.get("/files/api/list")
     preview = client.get("/files/api/preview", params={"path": "hello.txt"})
+    code_preview = client.get("/files/api/preview", params={"path": "script.py"})
+    bash_preview = client.get("/files/api/preview", params={"path": "deploy.sh"})
+    json_preview = client.get("/files/api/preview", params={"path": "config.json"})
+    image_preview = client.get("/files/api/preview", params={"path": "image.png"})
+    image = client.get("/files/api/image", params={"path": "image.png"})
+    image_as_text = client.get("/files/api/image", params={"path": "hello.txt"})
     denied = client.get("/files/api/list", params={"path": "../"})
 
     assert page.status_code == 200
     assert "文件浏览器" in page.text
     assert listing.status_code == 200
-    assert [entry["name"] for entry in listing.json()["entries"]] == ["subdir", "config.json", "hello.txt"]
+    assert [entry["name"] for entry in listing.json()["entries"]] == [
+        "subdir",
+        "config.json",
+        "deploy.sh",
+        "hello.txt",
+        "image.png",
+        "script.py",
+    ]
     assert preview.status_code == 200
     assert preview.json()["content"] == "hello"
+    assert code_preview.status_code == 200
+    assert code_preview.json()["language"] == "python"
+    assert bash_preview.status_code == 200
+    assert bash_preview.json()["language"] == "bash"
+    assert json_preview.status_code == 200
+    assert json_preview.json()["language"] == "json"
+    assert image_preview.status_code == 200
+    assert image_preview.json()["preview_type"] == "image"
+    assert image_preview.json()["mime_type"] == "image/png"
+    assert image.status_code == 200
+    assert image.headers["content-type"] == "image/png"
+    assert image.headers["content-disposition"].startswith("inline;")
+    assert image.content == b"\x89PNG\r\n\x1a\n"
+    assert image_as_text.status_code == 400
     assert denied.status_code == 403
 
 

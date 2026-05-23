@@ -26,7 +26,7 @@
                 <ul class="navbar-nav">
                     <li class="nav-item">
                         <a class="nav-link {% if request.url.path == '/' or request.url.path == root_path + '/' %}active{% endif %}" href="{{ root_path }}/">
-                            <i class="bi bi-speedometer2"></i> 仪表盘
+                            <i class="bi bi-speedometer2"></i> Dashboard
                         </a>
                     </li>
                     <li class="nav-item">
@@ -46,12 +46,12 @@
                     </li>
                     <li class="nav-item">
                         <a class="nav-link {% if '/files' in request.url.path %}active{% endif %}" href="{{ root_path }}/files/">
-                            <i class="bi bi-folder2-open"></i> 文件浏览器
+                            <i class="bi bi-folder2-open"></i> File Browser
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link {% if '/config' in request.url.path %}active{% endif %}" href="{{ root_path }}/elasticsearch/config">
-                            <i class="bi bi-gear"></i> 配置
+                            <i class="bi bi-gear"></i> Config
                         </a>
                     </li>
                 </ul>

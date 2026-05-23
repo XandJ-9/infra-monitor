@@ -32,6 +32,34 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync
 ```
 
+## 依赖导出
+
+项目依赖以 `pyproject.toml` 和 `uv.lock` 为准，`requirements.txt` 用于兼容传统生产部署环境。导出时优先使用 `uv export`，避免手工维护版本号。
+
+曾执行过的三种导出方式如下：
+
+1. 导出当前完整环境依赖，包含默认 dev 依赖和本地 editable 项：
+
+```bash
+uv export --format requirements.txt --no-hashes --no-header --output-file requirements.txt
+```
+
+该方式会包含 `pytest`、`ruff`、`playwright` 和 `-e .`，适合复现开发环境，不适合作为生产部署文件。
+
+2. 导出生产运行时依赖，排除 dev 依赖和本地项目项，但保留 `# via ...` 来源注释：
+
+```bash
+uv export --format requirements.txt --no-dev --no-emit-project --no-hashes --no-header --output-file requirements.txt
+```
+
+3. 导出生产运行时依赖，排除 dev 依赖、本地项目项和注释：
+
+```bash
+uv export --format requirements.txt --no-dev --no-emit-project --no-hashes --no-header --no-annotate --output-file requirements.txt
+```
+
+当前根目录 `requirements.txt` 使用第 3 种方式生成，作为生产环境部署依赖文件。它不应包含 `pytest`、`ruff`、`playwright`、`-e .` 或注释。
+
 ## 本地启动
 
 直接访问模式：
