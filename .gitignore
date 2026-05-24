@@ -27,4 +27,5 @@ Thumbs.db
 
 # Runtime
 *.log
+config.sqlite3
 screenshot.png

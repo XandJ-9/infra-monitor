@@ -2,7 +2,7 @@
 
 ## 背景与目标
 
-Infra Monitor 当前是一个轻量级 FastAPI 运维面板，已覆盖 ZooKeeper、Kafka、Elasticsearch 的基础状态展示、元数据查看和运行时配置管理。后续扩展目标是把它从“本地/内网诊断工具”逐步升级为“可部署、可观测、可告警、可扩展”的基础设施监控平台。
+Infra Monitor 当前是一个轻量级 FastAPI 运维面板，已覆盖 ZooKeeper、Kafka、Elasticsearch 的基础状态展示、元数据查看和模块内连接管理。后续扩展目标是把它从“本地/内网诊断工具”逐步升级为“可部署、可观测、可告警、可扩展”的基础设施监控平台。
 
 ## 当前基线
 
@@ -11,7 +11,7 @@ Infra Monitor 当前是一个轻量级 FastAPI 运维面板，已覆盖 ZooKeepe
 - Kafka：通过 ZooKeeper 元数据读取 broker、topic、旧版 consumer group 信息。
 - Elasticsearch：通过 HTTP API 获取集群健康、节点、索引信息。
 - 前端：Bootstrap + Jinja2 模板，局部使用 fetch 查询 API。
-- 配置：`config.json` 持久化，Web 配置页可修改 ZK/ES 地址和刷新间隔。
+- 连接管理：ZK/Kafka/ES 在各自页面维护连接列表，SQLite 作为本地持久化存储。
 - 测试：已有 lint、普通 pytest 基线；外部组件连通性测试默认跳过。
 
 ## 优先级路线
@@ -20,8 +20,8 @@ Infra Monitor 当前是一个轻量级 FastAPI 运维面板，已覆盖 ZooKeepe
 
 目标：修正现有功能的可靠性问题，让项目可以稳定开发、测试、部署。
 
-- 修正配置文件路径，确保读取和保存仓库根目录下的 `config.json`。
-- 增加配置模块测试：路径、默认值合并、非法 JSON fallback、保存格式。
+- 修正配置存储路径，确保读取和保存仓库根目录下的本地配置。
+- 增加配置存储测试：路径、默认值合并、非法 JSON fallback、保存格式和旧配置迁移。
 - 完成首页刷新逻辑：让 `refreshDashboard()` 真实更新三张状态卡，或改用 SSE。
 - 给关键 API 增加超时保护，避免外部组件异常拖垮请求。
 - 修复 `start-dev.sh` 的 Bash 兼容问题，并统一使用 `docker compose`。
@@ -31,7 +31,7 @@ Infra Monitor 当前是一个轻量级 FastAPI 运维面板，已覆盖 ZooKeepe
 验收标准：
 
 - 普通测试不依赖 Docker 或外部组件。
-- 配置页保存后，服务读取的是项目内 `config.json`。
+- 模块内连接管理保存后，服务读取的是项目内 SQLite 配置。
 - 首页点击刷新后页面数据可见更新。
 
 ### P1：Kafka 监控增强
@@ -42,7 +42,7 @@ Infra Monitor 当前是一个轻量级 FastAPI 运维面板，已覆盖 ZooKeepe
 - 获取 broker、topic、partition、replica、ISR、leader 信息。
 - 支持 consumer group 列表、成员、状态、订阅 topic、真实 lag。
 - 增加 topic 详情页：分区分布、副本健康、消息量指标入口。
-- 配置页增加 Kafka bootstrap servers、认证方式、超时参数。
+- Kafka 页面内连接管理支持 bootstrap servers、认证方式、超时参数。
 
 验收标准：
 
@@ -84,7 +84,7 @@ Infra Monitor 当前是一个轻量级 FastAPI 运维面板，已覆盖 ZooKeepe
 目标：让工具适合团队共享使用。
 
 - 支持多环境配置：dev、test、prod 或自定义环境。
-- 配置页支持环境切换、复制、导入导出。
+- 各组件页面支持环境切换、连接复制、导入导出。
 - 增加登录认证和只读/管理员权限。
 - 对配置保存、敏感字段、操作日志做审计。
 - 支持以环境变量覆盖配置，方便容器化部署。
@@ -119,7 +119,7 @@ Infra Monitor 当前是一个轻量级 FastAPI 运维面板，已覆盖 ZooKeepe
 
 ## 近期任务清单
 
-- [ ] 为配置模块补充完整单元测试。
+- [ ] 为配置存储和连接管理 API 补充完整单元测试。
 - [ ] 修复首页 `refreshDashboard()` DOM 更新。
 - [ ] 抽象组件状态采集接口，为 ZK/Kafka/ES 统一返回结构。
 - [ ] 为服务层增加 mock 测试，覆盖连接失败、超时、异常返回。
@@ -130,6 +130,6 @@ Infra Monitor 当前是一个轻量级 FastAPI 运维面板，已覆盖 ZooKeepe
 ## 风险与注意事项
 
 - Kafka 新版 consumer group 信息不能可靠地从 ZooKeeper 获取，需要 AdminClient。
-- 配置页涉及连接地址和未来凭据，生产使用前必须加认证和权限。
+- 连接管理涉及连接地址和未来凭据，生产使用前必须加认证和权限。
 - 采集历史趋势后会引入存储、迁移、保留策略，需要提前控制复杂度。
 - 面板需要避免一个组件连接失败拖慢所有页面，超时和并发隔离要持续加强。

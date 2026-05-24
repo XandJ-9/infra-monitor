@@ -10,7 +10,7 @@ Infra Monitor 当前提供 ZooKeeper、Kafka、Elasticsearch 三类基础设施�
 
 ### 首版功能
 
-- 顶部导航增加“文件浏览器”菜单，与 ZooKeeper、Kafka、Elasticsearch、配置同级。
+- 顶部导航增加“文件浏览器”菜单，与 ZooKeeper、Kafka、Elasticsearch 同级。
 - 文件浏览页展示当前目录路径、上级目录入口、子目录和文件列表。
 - 页面顶部展示当前访问根目录，支持手动输入根目录并打开。
 - 支持点击目录进入下级目录。
@@ -50,7 +50,7 @@ Infra Monitor 当前提供 ZooKeeper、Kafka、Elasticsearch 三类基础设施�
 }
 ```
 
-- `root` 默认指向项目根目录，后续可在配置页扩展为可编辑项。
+- `root` 默认指向项目根目录，也可通过页面输入框或 API `root` 参数临时切换。
 - 页面和 API 支持通过 `root` query 参数临时切换浏览根目录。
 - 所有前端传入路径都必须解析为 `root` 下的真实路径。
 - 不允许通过 `..`、符号链接或绝对路径逃逸出 `root`。
@@ -219,9 +219,9 @@ app/
 - 可通过 `file_browser.enabled` 关闭功能。
 - 可通过 `file_browser.max_preview_bytes` 控制最大预览字节数。
 
-## 7. 配置兼容
+## 7. 配置补齐
 
-`DEFAULT_CONFIG` 增加 `file_browser` 配置后，需要确保旧 `config.json` 仍能通过 deep merge 自动补齐默认值。
+`DEFAULT_CONFIG` 增加 `file_browser` 配置后，需要确保 SQLite 中缺少该段配置时仍能通过 deep merge 自动补齐默认值。
 
 测试需覆盖：
 

@@ -32,3 +32,22 @@ def test_component_pages_render_before_status_queries(monkeypatch) -> None:
         assert response.status_code == 200
         assert title in response.text
         assert "正在加载连接状态" in response.text
+
+
+def test_config_navigation_is_removed() -> None:
+    client = TestClient(app)
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert 'href="/config/"' not in response.text
+    assert 'href="/elasticsearch/config"' not in response.text
+
+
+def test_legacy_elasticsearch_config_redirects_to_elasticsearch_page() -> None:
+    client = TestClient(app)
+
+    response = client.get("/elasticsearch/config", follow_redirects=False)
+
+    assert response.status_code == 307
+    assert response.headers["location"] == "/elasticsearch/"

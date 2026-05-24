@@ -2,13 +2,13 @@
 """
 Elasticsearch 监控路由
 - 集群健康、节点列表、索引列表
-- 配置管理
+- 连接配置由 Elasticsearch 页面内管理
 """
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Query, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.config import load_config, normalize_config, save_config
 from app.models import ComponentStatus
@@ -222,99 +222,15 @@ async def es_search(
     )
 
 
-# ========== 配置管理路由 ==========
-
 @router.get("/config", response_class=HTMLResponse)
-async def config_page(request: Request):
-    """配置管理页面"""
-    cfg = load_config()
-    return request.app.state.templates.TemplateResponse(
-        request,
-        "config.html", {
-            "config": cfg,
-        }
-    )
+async def legacy_config_page(request: Request):
+    """旧配置路径兼容，连接管理已合并到 ES 页面。"""
+    root_path = request.scope.get("root_path", "")
+    return RedirectResponse(url=f"{root_path}/elasticsearch/", status_code=307)
 
 
 @router.post("/config")
-async def config_save(request: Request):
-    """保存配置"""
-    form = await request.form()
-    cfg = load_config()
-
-    # 更新 ZK 配置
-    zk_hosts = form.get("zk_hosts", "").strip()
-    zk_timeout = form.get("zk_timeout", "").strip()
-    zk_timeout_value = None
-    if zk_timeout:
-        try:
-            zk_timeout_value = int(zk_timeout)
-        except ValueError:
-            pass
-    if zk_hosts or zk_timeout_value is not None:
-        zk_cfg = cfg.setdefault("zookeeper", {})
-        active = zk_cfg.get("active")
-        for conn in zk_cfg.get("connections", []):
-            if conn.get("id") == active:
-                if zk_hosts:
-                    conn["hosts"] = zk_hosts
-                if zk_timeout_value is not None:
-                    conn["timeout"] = zk_timeout_value
-                break
-        if zk_hosts:
-            zk_cfg["hosts"] = zk_hosts
-        if zk_timeout_value is not None:
-            zk_cfg["timeout"] = zk_timeout_value
-
-    # 更新 ES 配置
-    es_url = form.get("es_url", "").strip()
-    es_timeout = form.get("es_timeout", "").strip()
-    es_username = form.get("es_username", "").strip()
-    es_password = form.get("es_password")
-    es_cfg = cfg.setdefault("elasticsearch", {})
-    active_es = es_cfg.get("active")
-    for conn in es_cfg.get("connections", []):
-        if conn.get("id") == active_es:
-            if es_url:
-                conn["url"] = es_url
-            if es_timeout:
-                try:
-                    conn["timeout"] = int(es_timeout)
-                except ValueError:
-                    pass
-            conn["username"] = es_username
-            if es_password:
-                conn["password"] = str(es_password)
-            break
-    if es_url:
-        es_cfg["url"] = es_url
-    if es_timeout:
-        try:
-            es_cfg["timeout"] = int(es_timeout)
-        except ValueError:
-            pass
-    es_cfg["username"] = es_username
-    if es_password:
-        es_cfg["password"] = str(es_password)
-
-    # 更新刷新间隔
-    refresh = form.get("refresh_interval", "").strip()
-    if refresh:
-        try:
-            cfg["refresh_interval"] = int(refresh)
-        except ValueError:
-            pass
-
-    save_config(cfg)
-
-    # 断开旧的 ZK 连接，让下次请求时用新配置重连
-    from app.services.zk_service import ZKService
-    ZKService().disconnect()
-
-    return request.app.state.templates.TemplateResponse(
-        request,
-        "config.html", {
-            "config": cfg,
-            "saved": True,
-        }
-    )
+async def legacy_config_save(request: Request):
+    """旧配置保存路径兼容，连接管理已合并到 ES 页面。"""
+    root_path = request.scope.get("root_path", "")
+    return RedirectResponse(url=f"{root_path}/elasticsearch/", status_code=307)

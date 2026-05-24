@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import json
-
 import app.config as config
 from app.main import app
 from app.services.zk_service import ZKService
@@ -9,16 +7,12 @@ from fastapi.testclient import TestClient
 
 
 def test_zookeeper_connection_crud(tmp_path, monkeypatch) -> None:
-    cfg_path = tmp_path / "config.json"
-    cfg_path.write_text(
-        json.dumps({
-            "zookeeper": {"hosts": "zk-default:2181", "timeout": 5},
-            "elasticsearch": {"url": "http://127.0.0.1:9200", "timeout": 5},
-            "refresh_interval": 30,
-        }),
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(config, "CONFIG_PATH", cfg_path)
+    monkeypatch.setattr(config, "CONFIG_DB_PATH", tmp_path / "config.sqlite3")
+    config.save_config({
+        "zookeeper": {"hosts": "zk-default:2181", "timeout": 5},
+        "elasticsearch": {"url": "http://127.0.0.1:9200", "timeout": 5},
+        "refresh_interval": 30,
+    })
     ZKService().disconnect()
     client = TestClient(app)
 

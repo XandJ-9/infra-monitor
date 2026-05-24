@@ -76,25 +76,56 @@ uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --root-path /infra-moni
 
 `--root-path /infra-monitor` 会让 FastAPI 在生成模板链接和静态文件路径时自动带上代理前缀。
 
-## 配置
+## 连接与运行配置
 
-运行时配置保存在根目录 `config.json`：
+ZooKeeper、Kafka、Elasticsearch 的连接信息在各自监控页面内管理，页面会通过对应模块的连接 API 写入根目录 `config.sqlite3`。SQLite 是当前唯一的本地持久化存储，不再提供独立的“配置管理”页面，也不再从 `config.json` 读取或迁移旧配置。
 
 ```json
 {
   "zookeeper": {
-    "hosts": "127.0.0.1:2181",
-    "timeout": 10
+    "active": "default",
+    "connections": [
+      {
+        "id": "default",
+        "name": "默认集群",
+        "hosts": "127.0.0.1:2181",
+        "timeout": 10
+      }
+    ]
+  },
+  "kafka": {
+    "active": "default",
+    "connections": [
+      {
+        "id": "default",
+        "name": "默认集群",
+        "bootstrap_servers": "127.0.0.1:9092",
+        "timeout": 10,
+        "security_protocol": "PLAINTEXT",
+        "sasl_mechanism": "PLAIN",
+        "username": "",
+        "password": ""
+      }
+    ]
   },
   "elasticsearch": {
-    "url": "http://127.0.0.1:9200",
-    "timeout": 10
+    "active": "default",
+    "connections": [
+      {
+        "id": "default",
+        "name": "默认集群",
+        "url": "http://127.0.0.1:9200",
+        "timeout": 10,
+        "username": "",
+        "password": ""
+      }
+    ]
   },
   "refresh_interval": 30
 }
 ```
 
-配置也可以在 Web 界面的“配置”页面修改。
+`app/config.py` 会归一化连接列表，并把当前连接同步为服务层直接读取的字段。文件浏览器仍读取 `file_browser` 配置作为默认根目录和预览上限。
 
 ## 测试与检查
 

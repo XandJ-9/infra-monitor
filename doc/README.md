@@ -6,7 +6,9 @@
 
 - [架构设计](architecture.md)：应用分层、目录结构、主要页面与 API。
 - [开发流程](development.md)：本地启动、配置、测试、Docker 测试环境和提交前检查。
+- [AI Coding 指导原则](../AGENTS.md)：面向 AI coding agent 的项目总结、修改边界、编码原则和自检清单。
 - [开发计划](development-plan.md)：项目阶段目标、优先级路线和近期任务。
+- [Kafka 监控能力设计](kafka-monitoring-design.md)：Kafka 运维监控关注面、基础能力、告警建议和落地路径。
 - [在线文件浏览器设计方案](file-browser-design.md)：文件浏览器模块的安全、后端、前端和测试设计。
 
 ## 文档维护约定

@@ -6,16 +6,29 @@ Infra Monitor 是一个轻量级基础设施监控面板，用于在内网或本
 
 - 首页仪表盘：汇总各组件连接状态、版本和关键指标
 - ZooKeeper 监控：集群状态、节点树浏览、节点数据查看
-- Kafka 监控：Broker、Topic、Consumer Group 基础信息
+- Kafka 监控：Broker、Topic、Partition、Consumer Group 和消费延迟等基础信息
 - Elasticsearch 监控：集群健康、节点负载、索引列表
 - 在线文件浏览器：只读浏览服务器文件目录，预览文本、代码和图片文件
-- 配置管理：通过 Web 页面调整连接地址和刷新间隔
+- 连接管理：ZooKeeper、Kafka、Elasticsearch 在各自页面内维护连接信息
+
+## Kafka 监控目标
+
+Kafka 模块的长期目标是帮助运维快速判断：集群是否可用、生产者是否还能写入、消费者是否还能读取、数据副本是否安全、消费延迟是否失控、容量和流量是否存在趋势性风险。
+
+后续优化方向包括：
+
+- 使用 Kafka AdminClient 作为主要数据来源，兼容 ZooKeeper 旧集群元数据。
+- 展示 broker、topic、partition leader、replicas、ISR、offline partition 和 under-replicated partition。
+- 展示 consumer group 状态、成员、订阅 topic、partition 级 offset 和 lag。
+- 增加 topic、consumer group、broker 详情页，以及单副本、ISR 不足、lag 高、leader 倾斜等风险提示。
+- 预留 JMX Exporter、Prometheus 或兼容指标源入口，用于吞吐、延迟、磁盘和历史趋势监控。
 
 ## 技术栈
 
 - Python 3.10+
 - FastAPI + Uvicorn
 - Jinja2 + Bootstrap 5
+- SQLite
 - kazoo
 - httpx
 
@@ -44,9 +57,11 @@ uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 项目设计、开发流程和后续规划已整理到 [doc](doc/) 目录：
 
 - [文档索引](doc/README.md)
+- [AI Coding 指导原则](AGENTS.md)
 - [架构设计](doc/architecture.md)
 - [开发流程](doc/development.md)
 - [开发计划](doc/development-plan.md)
+- [Kafka 监控能力设计](doc/kafka-monitoring-design.md)
 - [在线文件浏览器设计方案](doc/file-browser-design.md)
 
 ## 截图预览
@@ -66,7 +81,3 @@ uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ### Elasticsearch 监控
 
 ![Elasticsearch](screenshots/elasticsearch.png)
-
-### 配置管理
-
-![Config](screenshots/config.png)

@@ -50,6 +50,7 @@ class KafkaBrokerInfo:
     broker_id: int
     host: str
     port: int
+    rack: str = ""
 
 
 @dataclass
@@ -59,6 +60,8 @@ class KafkaTopicInfo:
     partitions: int = 0
     replicas: int = 0
     partition_details: list[dict[str, Any]] = field(default_factory=list)
+    under_replicated_partitions: int = 0
+    offline_partitions: int = 0
 
 
 @dataclass
@@ -69,6 +72,7 @@ class KafkaConsumerGroupInfo:
     members: int = 0
     topics: list[str] = field(default_factory=list)
     lag: int = 0
+    offsets: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass

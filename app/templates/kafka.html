@@ -4,6 +4,74 @@
 {% block content %}
 <h4 class="mb-3"><i class="bi bi-lightning"></i> Kafka 监控</h4>
 
+<!-- 连接管理 -->
+<div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>连接管理</span>
+        <button class="btn btn-sm btn-outline-secondary" type="button" onclick="resetKafkaConnectionForm()">
+            <i class="bi bi-plus-lg"></i> 新增连接
+        </button>
+    </div>
+    <div class="card-body">
+        <div class="row g-3 align-items-end mb-3">
+            <div class="col-md-6">
+                <label class="form-label">当前集群</label>
+                <select class="form-select" id="kafka-active-connection" onchange="setActiveKafkaConnection(this.value)"></select>
+            </div>
+        </div>
+        <form class="kafka-connection-form" id="kafka-connection-form" onsubmit="saveKafkaConnection(event)">
+            <input type="hidden" id="kafka-connection-id">
+            <div class="row g-3 align-items-end">
+                <div class="col-lg-2 col-md-4">
+                    <label class="form-label">名称</label>
+                    <input type="text" class="form-control" id="kafka-connection-name" placeholder="生产集群">
+                </div>
+                <div class="col-lg-5 col-md-8">
+                    <label class="form-label">Bootstrap Servers</label>
+                    <input type="text" class="form-control" id="kafka-connection-bootstrap" placeholder="broker1:9092,broker2:9092" required>
+                </div>
+                <div class="col-lg-2 col-md-4">
+                    <label class="form-label">安全协议</label>
+                    <select class="form-select" id="kafka-connection-security-protocol">
+                        <option value="PLAINTEXT">PLAINTEXT</option>
+                        <option value="SSL">SSL</option>
+                        <option value="SASL_PLAINTEXT">SASL_PLAINTEXT</option>
+                        <option value="SASL_SSL">SASL_SSL</option>
+                    </select>
+                </div>
+                <div class="col-lg-2 col-md-4">
+                    <label class="form-label">超时（秒）</label>
+                    <input type="number" class="form-control" id="kafka-connection-timeout" min="1" max="120" value="10">
+                </div>
+            </div>
+            <div class="row g-3 align-items-end mt-1">
+                <div class="col-lg-3 col-md-4">
+                    <label class="form-label">SASL 机制</label>
+                    <select class="form-select" id="kafka-connection-sasl-mechanism">
+                        <option value="PLAIN">PLAIN</option>
+                        <option value="SCRAM-SHA-256">SCRAM-SHA-256</option>
+                        <option value="SCRAM-SHA-512">SCRAM-SHA-512</option>
+                    </select>
+                </div>
+                <div class="col-lg-3 col-md-4">
+                    <label class="form-label">SASL 账号</label>
+                    <input type="text" class="form-control" id="kafka-connection-username" autocomplete="username">
+                </div>
+                <div class="col-lg-3 col-md-4">
+                    <label class="form-label">SASL 密码</label>
+                    <input type="password" class="form-control" id="kafka-connection-password" autocomplete="current-password" placeholder="留空保留原密码">
+                </div>
+                <div class="col-lg-1 col-md-4 d-grid">
+                    <button type="submit" class="btn btn-primary" title="保存">
+                        <i class="bi bi-save"></i>
+                    </button>
+                </div>
+            </div>
+        </form>
+        <div id="kafka-connections-table" class="table-responsive kafka-connection-table mt-3"></div>
+    </div>
+</div>
+
 <!-- 状态概览 -->
 <div class="card mb-3">
     <div class="card-header d-flex justify-content-between align-items-center">
@@ -54,6 +122,150 @@
 
 {% block extra_js %}
 <script>
+let kafkaConnections = [];
+let kafkaActiveStatus = null;
+
+function escapeJs(text) {
+    return String(text).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+async function loadKafkaConnections() {
+    const data = await fetch(`${BASE_URL}/kafka/api/connections`).then((r) => r.json());
+    kafkaConnections = data.connections || [];
+    renderKafkaConnections(data.active);
+}
+
+function renderKafkaConnections(activeId) {
+    const select = document.getElementById('kafka-active-connection');
+    select.innerHTML = kafkaConnections.map((conn) => `
+        <option value="${escapeHtml(conn.id)}" ${conn.id === activeId ? 'selected' : ''}>
+            ${escapeHtml(formatKafkaConnectionOption(conn, activeId))}
+        </option>
+    `).join('');
+
+    const table = document.getElementById('kafka-connections-table');
+    if (!kafkaConnections.length) {
+        table.innerHTML = '<p class="text-muted mb-0">暂无连接配置</p>';
+        return;
+    }
+    table.innerHTML = `<table class="table table-sm align-middle mb-0">
+        <thead><tr><th>名称</th><th>Bootstrap Servers</th><th>协议</th><th>SASL</th><th>账号</th><th>密码</th><th>超时</th><th class="text-end">操作</th></tr></thead>
+        <tbody>${kafkaConnections.map((conn) => `
+            <tr>
+                <td class="kafka-connection-name-cell">
+                    ${conn.active ? '<span class="badge bg-primary me-1">当前</span>' : ''}
+                    ${escapeHtml(conn.name)}
+                </td>
+                <td class="kafka-bootstrap-cell"><code>${escapeHtml(conn.bootstrap_servers)}</code></td>
+                <td>${escapeHtml(conn.security_protocol || 'PLAINTEXT')}</td>
+                <td>${escapeHtml(conn.sasl_mechanism || '-')}</td>
+                <td>${conn.username ? escapeHtml(conn.username) : '<span class="text-muted">-</span>'}</td>
+                <td>${conn.has_password ? '<span class="badge bg-secondary">已配置</span>' : '<span class="text-muted">-</span>'}</td>
+                <td>${escapeHtml(String(conn.timeout))}s</td>
+                <td class="text-end kafka-actions-cell">
+                    <button class="btn btn-sm btn-outline-primary" type="button" title="切换" onclick="setActiveKafkaConnection('${escapeJs(conn.id)}')" ${conn.active ? 'disabled' : ''}>
+                        <i class="bi bi-check2-circle"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" type="button" title="编辑" onclick="editKafkaConnection('${escapeJs(conn.id)}')">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" type="button" title="删除" onclick="deleteKafkaConnection('${escapeJs(conn.id)}')" ${kafkaConnections.length <= 1 ? 'disabled' : ''}>
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('')}</tbody>
+    </table>`;
+}
+
+function formatKafkaConnectionOption(conn, activeId) {
+    const isActive = conn.id === activeId;
+    const cluster = isActive && kafkaActiveStatus?.cluster ? ` / ${kafkaActiveStatus.cluster}` : '';
+    return `${conn.name}${cluster} (${conn.bootstrap_servers})`;
+}
+
+function resetKafkaConnectionForm() {
+    document.getElementById('kafka-connection-id').value = '';
+    document.getElementById('kafka-connection-name').value = '';
+    document.getElementById('kafka-connection-bootstrap').value = '';
+    document.getElementById('kafka-connection-security-protocol').value = 'PLAINTEXT';
+    document.getElementById('kafka-connection-sasl-mechanism').value = 'PLAIN';
+    document.getElementById('kafka-connection-username').value = '';
+    document.getElementById('kafka-connection-password').value = '';
+    document.getElementById('kafka-connection-timeout').value = '10';
+    document.getElementById('kafka-connection-bootstrap').focus();
+}
+
+function editKafkaConnection(id) {
+    const conn = kafkaConnections.find((item) => item.id === id);
+    if (!conn) return;
+    document.getElementById('kafka-connection-id').value = conn.id;
+    document.getElementById('kafka-connection-name').value = conn.name || '';
+    document.getElementById('kafka-connection-bootstrap').value = conn.bootstrap_servers || '';
+    document.getElementById('kafka-connection-security-protocol').value = conn.security_protocol || 'PLAINTEXT';
+    document.getElementById('kafka-connection-sasl-mechanism').value = conn.sasl_mechanism || 'PLAIN';
+    document.getElementById('kafka-connection-username').value = conn.username || '';
+    document.getElementById('kafka-connection-password').value = '';
+    document.getElementById('kafka-connection-timeout').value = conn.timeout || 10;
+}
+
+async function saveKafkaConnection(event) {
+    event.preventDefault();
+    const password = document.getElementById('kafka-connection-password').value;
+    const payload = {
+        id: document.getElementById('kafka-connection-id').value.trim(),
+        name: document.getElementById('kafka-connection-name').value.trim(),
+        bootstrap_servers: document.getElementById('kafka-connection-bootstrap').value.trim(),
+        security_protocol: document.getElementById('kafka-connection-security-protocol').value,
+        sasl_mechanism: document.getElementById('kafka-connection-sasl-mechanism').value,
+        username: document.getElementById('kafka-connection-username').value.trim(),
+        timeout: Number(document.getElementById('kafka-connection-timeout').value || 10),
+    };
+    if (password || !payload.id) {
+        payload.password = password;
+    }
+    const response = await fetch(`${BASE_URL}/kafka/api/connections`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+        const data = await response.json();
+        alert(data.error || '保存失败');
+        return;
+    }
+    resetKafkaConnectionForm();
+    await refreshKafkaPage();
+}
+
+async function setActiveKafkaConnection(id) {
+    if (!id) return;
+    const response = await fetch(`${BASE_URL}/kafka/api/connections/active`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+    });
+    if (!response.ok) {
+        const data = await response.json();
+        alert(data.error || '切换失败');
+        return;
+    }
+    await refreshKafkaPage();
+}
+
+async function deleteKafkaConnection(id) {
+    if (!confirm('删除这个 Kafka 连接？')) return;
+    const response = await fetch(`${BASE_URL}/kafka/api/connections/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+    });
+    if (!response.ok) {
+        const data = await response.json();
+        alert(data.error || '删除失败');
+        return;
+    }
+    await refreshKafkaPage();
+}
+
 function renderKafkaStatus(info) {
     const badge = document.getElementById('kafka-status-badge');
     const body = document.getElementById('kafka-status-body');
@@ -73,6 +285,28 @@ function renderKafkaStatus(info) {
         rows.push(`<p class="mb-1"><strong>${escapeHtml(key)}：</strong>${escapeHtml(String(value))}</p>`);
     });
     body.innerHTML = rows.join('');
+}
+
+function renderPartitionBadges(topic) {
+    const badges = [];
+    if (Number(topic.offline_partitions || 0) > 0) {
+        badges.push(`<span class="badge bg-danger ms-1">Offline ${escapeHtml(String(topic.offline_partitions))}</span>`);
+    }
+    if (Number(topic.under_replicated_partitions || 0) > 0) {
+        badges.push(`<span class="badge bg-warning text-dark ms-1">URP ${escapeHtml(String(topic.under_replicated_partitions))}</span>`);
+    }
+    return badges.join('');
+}
+
+function renderPartitionSummary(topic) {
+    const details = topic.partition_details || [];
+    if (!details.length) {
+        return '-';
+    }
+    return details.slice(0, 3).map((p) => {
+        const statusClass = p.offline ? 'text-danger' : (p.under_replicated ? 'text-warning' : 'text-muted');
+        return `<span class="${statusClass}">#${escapeHtml(String(p.partition))} L:${escapeHtml(String(p.leader))} ISR:${escapeHtml((p.isr || []).join(','))}</span>`;
+    }).join('<br>') + (details.length > 3 ? `<br><span class="text-muted">还有 ${details.length - 3} 个分区</span>` : '');
 }
 
 function renderKafkaTable(bodyId, countId, rows, emptyText, columns, rowRenderer) {
@@ -112,23 +346,31 @@ async function loadKafkaDetails() {
     ]);
 
     renderKafkaTable('kafka-brokers-body', 'kafka-brokers-count', brokers, '暂无 Broker 信息',
-        ['Broker ID', 'Host', 'Port'],
-        (b) => `<tr><td><span class="badge bg-primary">${escapeHtml(String(b.broker_id))}</span></td><td>${escapeHtml(b.host || '')}</td><td>${escapeHtml(String(b.port || ''))}</td></tr>`);
+        ['Broker ID', 'Host', 'Port', 'Rack'],
+        (b) => `<tr><td><span class="badge bg-primary">${escapeHtml(String(b.broker_id))}</span></td><td>${escapeHtml(b.host || '')}</td><td>${escapeHtml(String(b.port || ''))}</td><td>${escapeHtml(b.rack || '-')}</td></tr>`);
     renderKafkaTable('kafka-topics-body', 'kafka-topics-count', topics, '暂无 Topic 信息',
-        ['名称', '分区数', '副本数'],
-        (t) => `<tr><td><code>${escapeHtml(t.name || '')}</code></td><td>${escapeHtml(String(t.partitions || 0))}</td><td>${escapeHtml(String(t.replicas || 0))}</td></tr>`);
+        ['名称', '分区数', '副本数', '分区状态'],
+        (t) => `<tr><td><code>${escapeHtml(t.name || '')}</code>${renderPartitionBadges(t)}</td><td>${escapeHtml(String(t.partitions || 0))}</td><td>${escapeHtml(String(t.replicas || 0))}</td><td>${renderPartitionSummary(t)}</td></tr>`);
     renderKafkaTable('kafka-groups-body', 'kafka-groups-count', groups, '暂无 Consumer Group 信息',
-        ['Group ID', '成员数', '订阅 Topic', 'Lag'],
+        ['Group ID', '状态', '成员数', '订阅 Topic', 'Lag'],
         (g) => {
             const lag = Number(g.lag || 0);
             const lagHtml = lag > 0 ? `<span class="badge bg-warning">${lag}</span>` : escapeHtml(String(lag));
-            return `<tr><td><code>${escapeHtml(g.group_id || '')}</code></td><td>${escapeHtml(String(g.members || 0))}</td><td>${escapeHtml((g.topics || []).join(', ') || '-')}</td><td>${lagHtml}</td></tr>`;
+            return `<tr><td><code>${escapeHtml(g.group_id || '')}</code></td><td>${escapeHtml(g.state || '-')}</td><td>${escapeHtml(String(g.members || 0))}</td><td>${escapeHtml((g.topics || []).join(', ') || '-')}</td><td>${lagHtml}</td></tr>`;
         });
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+    await refreshKafkaPage();
+});
+
+async function refreshKafkaPage() {
     try {
+        await loadKafkaConnections();
         const status = await fetch(`${BASE_URL}/kafka/api/status`).then((r) => r.json());
+        kafkaActiveStatus = status.connected ? status : null;
+        const activeId = document.getElementById('kafka-active-connection').value;
+        renderKafkaConnections(activeId);
         renderKafkaStatus(status);
         if (status.connected) {
             await loadKafkaDetails();
@@ -141,6 +383,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('kafka-status-body').innerHTML = `<p class="text-danger mb-0">加载失败: ${escapeHtml(String(err))}</p>`;
         setKafkaDetailsMessage('加载失败');
     }
-});
+}
 </script>
 {% endblock %}

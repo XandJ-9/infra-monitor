@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import json
-
 from fastapi.testclient import TestClient
 
 import app.config as config
@@ -15,12 +13,8 @@ def test_files_page_and_apis(tmp_path, monkeypatch) -> None:
     (tmp_path / "deploy.sh").write_text("#!/usr/bin/env bash\necho hello\n", encoding="utf-8")
     (tmp_path / "script.py").write_text("def hello():\n    return 1\n", encoding="utf-8")
     (tmp_path / "image.png").write_bytes(b"\x89PNG\r\n\x1a\n")
-    cfg_path = tmp_path / "config.json"
-    cfg_path.write_text(
-        json.dumps({"file_browser": {"root": str(tmp_path), "max_preview_bytes": 32}}),
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(config, "CONFIG_PATH", cfg_path)
+    monkeypatch.setattr(config, "CONFIG_DB_PATH", tmp_path / "config.sqlite3")
+    config.save_config({"file_browser": {"root": str(tmp_path), "max_preview_bytes": 32}})
     client = TestClient(app)
 
     page = client.get("/files/")
@@ -40,6 +34,7 @@ def test_files_page_and_apis(tmp_path, monkeypatch) -> None:
     assert [entry["name"] for entry in listing.json()["entries"]] == [
         "subdir",
         "config.json",
+        "config.sqlite3",
         "deploy.sh",
         "hello.txt",
         "image.png",
@@ -71,12 +66,8 @@ def test_files_root_query_overrides_default_root(tmp_path, monkeypatch) -> None:
     selected_root.mkdir()
     (configured_root / "configured.txt").write_text("configured", encoding="utf-8")
     (selected_root / "selected.txt").write_text("selected", encoding="utf-8")
-    cfg_path = tmp_path / "config.json"
-    cfg_path.write_text(
-        json.dumps({"file_browser": {"root": str(configured_root), "max_preview_bytes": 32}}),
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(config, "CONFIG_PATH", cfg_path)
+    monkeypatch.setattr(config, "CONFIG_DB_PATH", tmp_path / "config.sqlite3")
+    config.save_config({"file_browser": {"root": str(configured_root), "max_preview_bytes": 32}})
     client = TestClient(app)
 
     page = client.get("/files/", params={"root": str(selected_root)})
@@ -99,12 +90,8 @@ def test_files_root_query_overrides_default_root(tmp_path, monkeypatch) -> None:
 def test_files_api_error_statuses(tmp_path, monkeypatch) -> None:
     (tmp_path / "folder").mkdir()
     (tmp_path / "hello.txt").write_text("hello", encoding="utf-8")
-    cfg_path = tmp_path / "config.json"
-    cfg_path.write_text(
-        json.dumps({"file_browser": {"root": str(tmp_path), "max_preview_bytes": 32}}),
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(config, "CONFIG_PATH", cfg_path)
+    monkeypatch.setattr(config, "CONFIG_DB_PATH", tmp_path / "config.sqlite3")
+    config.save_config({"file_browser": {"root": str(tmp_path), "max_preview_bytes": 32}})
     client = TestClient(app)
 
     missing = client.get("/files/api/list", params={"path": "missing"})

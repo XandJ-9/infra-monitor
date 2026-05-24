@@ -105,9 +105,42 @@ code {
     font-size: 0.75rem;
 }
 
+/* Kafka 连接管理 */
+.kafka-connection-form .form-label {
+    margin-bottom: 0.25rem;
+    white-space: nowrap;
+}
+
+.kafka-connection-table {
+    overflow-x: auto;
+}
+
+.kafka-connection-table table {
+    min-width: 980px;
+}
+
+.kafka-connection-table th,
+.kafka-connection-table td {
+    white-space: nowrap;
+}
+
+.kafka-bootstrap-cell code {
+    display: inline-block;
+    min-width: 260px;
+}
+
+.kafka-actions-cell {
+    min-width: 128px;
+}
+
 /* 响应式调整 */
 @media (max-width: 768px) {
     .component-card {
         margin-bottom: 12px;
+    }
+
+    .kafka-connection-table {
+        margin-left: -0.25rem;
+        margin-right: -0.25rem;
     }
 }

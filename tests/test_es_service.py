@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import json
-
 import pytest
 from fastapi.testclient import TestClient
 
@@ -99,16 +97,12 @@ def test_es_client_options_include_basic_auth() -> None:
 
 
 def test_elasticsearch_connection_crud(tmp_path, monkeypatch) -> None:
-    cfg_path = tmp_path / "config.json"
-    cfg_path.write_text(
-        json.dumps({
-            "zookeeper": {"hosts": "zk-default:2181", "timeout": 5},
-            "elasticsearch": {"url": "http://es-default:9200", "timeout": 5},
-            "refresh_interval": 30,
-        }),
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(config, "CONFIG_PATH", cfg_path)
+    monkeypatch.setattr(config, "CONFIG_DB_PATH", tmp_path / "config.sqlite3")
+    config.save_config({
+        "zookeeper": {"hosts": "zk-default:2181", "timeout": 5},
+        "elasticsearch": {"url": "http://es-default:9200", "timeout": 5},
+        "refresh_interval": 30,
+    })
     client = TestClient(app)
 
     initial = client.get("/elasticsearch/api/connections")
