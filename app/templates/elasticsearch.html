@@ -4,6 +4,56 @@
 {% block content %}
 <h4 class="mb-3"><i class="bi bi-search"></i> Elasticsearch 监控</h4>
 
+<!-- 连接管理 -->
+<div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>连接管理</span>
+        <button class="btn btn-sm btn-outline-secondary" type="button" onclick="resetEsConnectionForm()">
+            <i class="bi bi-plus-lg"></i> 新增连接
+        </button>
+    </div>
+    <div class="card-body">
+        <div class="row g-3 align-items-end mb-3">
+            <div class="col-md-5">
+                <label class="form-label">当前集群</label>
+                <select class="form-select" id="es-active-connection" onchange="setActiveEsConnection(this.value)"></select>
+            </div>
+            <div class="col-md-7">
+                <div id="es-connection-summary" class="text-muted"></div>
+            </div>
+        </div>
+        <form class="row g-2 align-items-end" id="es-connection-form" onsubmit="saveEsConnection(event)">
+            <input type="hidden" id="es-connection-id">
+            <div class="col-md-2">
+                <label class="form-label">名称</label>
+                <input type="text" class="form-control" id="es-connection-name" placeholder="生产集群">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">连接地址</label>
+                <input type="url" class="form-control" id="es-connection-url" placeholder="https://es.example.com:9200" required>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">账号</label>
+                <input type="text" class="form-control" id="es-connection-username" autocomplete="username">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">密码</label>
+                <input type="password" class="form-control" id="es-connection-password" autocomplete="current-password" placeholder="留空保留原密码">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">超时（秒）</label>
+                <input type="number" class="form-control" id="es-connection-timeout" min="1" max="120" value="10">
+            </div>
+            <div class="col-md-1 d-grid">
+                <button type="submit" class="btn btn-primary" title="保存">
+                    <i class="bi bi-save"></i>
+                </button>
+            </div>
+        </form>
+        <div id="es-connections-table" class="table-responsive mt-3"></div>
+    </div>
+</div>
+
 <!-- 状态概览 -->
 <div class="row g-3 mb-3">
     <div class="col-md-4">
@@ -85,6 +135,163 @@
 
 {% block extra_js %}
 <script>
+let esConnections = [];
+let esActiveStatus = null;
+
+function escapeJs(text) {
+    return String(text).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+async function fetchEsApi(path, options) {
+    let response = await fetch(`${BASE_URL}${path}`, options);
+    if (response.status === 404 && BASE_URL) {
+        response = await fetch(path, options);
+    }
+    return response;
+}
+
+async function fetchEsJson(path, options) {
+    const response = await fetchEsApi(path, options);
+    return response.json();
+}
+
+async function loadEsConnections() {
+    const data = await fetchEsJson('/elasticsearch/api/connections');
+    esConnections = data.connections || [];
+    renderEsConnections(data.active);
+}
+
+function renderEsConnections(activeId) {
+    const select = document.getElementById('es-active-connection');
+    select.innerHTML = esConnections.map((conn) => `
+        <option value="${escapeHtml(conn.id)}" ${conn.id === activeId ? 'selected' : ''}>
+            ${escapeHtml(formatEsConnectionOption(conn, activeId))}
+        </option>
+    `).join('');
+
+    const active = esConnections.find((conn) => conn.id === activeId) || esConnections[0];
+    document.getElementById('es-connection-summary').innerHTML = active
+        ? `<strong>${escapeHtml(active.name)}</strong> <code>${escapeHtml(active.url)}</code>
+           ${active.id === activeId && esActiveStatus?.cluster ? `<span class="badge bg-primary ms-2">${escapeHtml(esActiveStatus.cluster)}</span>` : ''}
+           ${active.username ? `<span class="badge bg-info ms-2">${escapeHtml(active.username)}</span>` : ''}
+           ${active.has_password ? '<span class="badge bg-secondary ms-1">已配置密码</span>' : ''}`
+        : '<span class="text-danger">暂无连接配置</span>';
+
+    const table = document.getElementById('es-connections-table');
+    if (!esConnections.length) {
+        table.innerHTML = '<p class="text-muted mb-0">暂无连接配置</p>';
+        return;
+    }
+    table.innerHTML = `<table class="table table-sm align-middle mb-0">
+        <thead><tr><th>名称</th><th>地址</th><th>账号</th><th>密码</th><th>超时</th><th class="text-end">操作</th></tr></thead>
+        <tbody>${esConnections.map((conn) => `
+            <tr>
+                <td>
+                    ${conn.active ? '<span class="badge bg-primary me-1">当前</span>' : ''}
+                    ${escapeHtml(conn.name)}
+                </td>
+                <td><code>${escapeHtml(conn.url)}</code></td>
+                <td>${conn.username ? escapeHtml(conn.username) : '<span class="text-muted">-</span>'}</td>
+                <td>${conn.has_password ? '<span class="badge bg-secondary">已配置</span>' : '<span class="text-muted">-</span>'}</td>
+                <td>${escapeHtml(String(conn.timeout))}s</td>
+                <td class="text-end">
+                    <button class="btn btn-sm btn-outline-primary" type="button" title="切换" onclick="setActiveEsConnection('${escapeJs(conn.id)}')" ${conn.active ? 'disabled' : ''}>
+                        <i class="bi bi-check2-circle"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" type="button" title="编辑" onclick="editEsConnection('${escapeJs(conn.id)}')">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" type="button" title="删除" onclick="deleteEsConnection('${escapeJs(conn.id)}')" ${esConnections.length <= 1 ? 'disabled' : ''}>
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('')}</tbody>
+    </table>`;
+}
+
+function formatEsConnectionOption(conn, activeId) {
+    const isActive = conn.id === activeId;
+    const cluster = isActive && esActiveStatus?.cluster ? ` / ${esActiveStatus.cluster}` : '';
+    return `${conn.name}${cluster} (${conn.url})`;
+}
+
+function resetEsConnectionForm() {
+    document.getElementById('es-connection-id').value = '';
+    document.getElementById('es-connection-name').value = '';
+    document.getElementById('es-connection-url').value = '';
+    document.getElementById('es-connection-username').value = '';
+    document.getElementById('es-connection-password').value = '';
+    document.getElementById('es-connection-timeout').value = '10';
+    document.getElementById('es-connection-url').focus();
+}
+
+function editEsConnection(id) {
+    const conn = esConnections.find((item) => item.id === id);
+    if (!conn) return;
+    document.getElementById('es-connection-id').value = conn.id;
+    document.getElementById('es-connection-name').value = conn.name || '';
+    document.getElementById('es-connection-url').value = conn.url || '';
+    document.getElementById('es-connection-username').value = conn.username || '';
+    document.getElementById('es-connection-password').value = '';
+    document.getElementById('es-connection-timeout').value = conn.timeout || 10;
+}
+
+async function saveEsConnection(event) {
+    event.preventDefault();
+    const password = document.getElementById('es-connection-password').value;
+    const payload = {
+        id: document.getElementById('es-connection-id').value.trim(),
+        name: document.getElementById('es-connection-name').value.trim(),
+        url: document.getElementById('es-connection-url').value.trim(),
+        username: document.getElementById('es-connection-username').value.trim(),
+        timeout: Number(document.getElementById('es-connection-timeout').value || 10),
+    };
+    if (password || !payload.id) {
+        payload.password = password;
+    }
+    const response = await fetchEsApi('/elasticsearch/api/connections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+        const data = await response.json();
+        alert(data.error || '保存失败');
+        return;
+    }
+    resetEsConnectionForm();
+    await refreshEsPage();
+}
+
+async function setActiveEsConnection(id) {
+    if (!id) return;
+    const response = await fetchEsApi('/elasticsearch/api/connections/active', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+    });
+    if (!response.ok) {
+        const data = await response.json();
+        alert(data.error || '切换失败');
+        return;
+    }
+    await refreshEsPage();
+}
+
+async function deleteEsConnection(id) {
+    if (!confirm('删除这个 Elasticsearch 连接？')) return;
+    const response = await fetchEsApi(`/elasticsearch/api/connections/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+    });
+    if (!response.ok) {
+        const data = await response.json();
+        alert(data.error || '删除失败');
+        return;
+    }
+    await refreshEsPage();
+}
+
 function renderEsStatus(info) {
     const body = document.getElementById('es-status-body');
     if (!info.connected) {
@@ -96,7 +303,8 @@ function renderEsStatus(info) {
 
     body.innerHTML = `
         <span class="badge bg-success fs-6">已连接</span>
-        <p class="mt-2 mb-1"><strong>集群：</strong>${escapeHtml(info.cluster || '已连接')}</p>
+        <p class="mt-2 mb-1"><strong>当前集群：</strong>${escapeHtml(info.metrics?.['连接名称'] || info.cluster || '已连接')}</p>
+        <p class="mb-1"><strong>ES 集群：</strong>${escapeHtml(info.cluster || '-')}</p>
         <p class="mb-0"><strong>版本：</strong>${escapeHtml(info.version || '-')}</p>`;
 }
 
@@ -195,9 +403,9 @@ function setEsSearchEnabled(enabled) {
 async function loadEsDetails() {
     setEsLazyMessage('正在加载明细...');
     const [health, nodes, indices] = await Promise.all([
-        fetch(`${BASE_URL}/elasticsearch/api/health`).then((r) => r.json()),
-        fetch(`${BASE_URL}/elasticsearch/api/nodes`).then((r) => r.json()),
-        fetch(`${BASE_URL}/elasticsearch/api/indices`).then((r) => r.json()),
+        fetchEsJson('/elasticsearch/api/health'),
+        fetchEsJson('/elasticsearch/api/nodes'),
+        fetchEsJson('/elasticsearch/api/indices'),
     ]);
     renderEsHealth(health);
     renderEsNodes(nodes);
@@ -270,7 +478,7 @@ async function loadEsDetails() {
         resultsEl.replaceChildren();
 
         const params = new URLSearchParams({ index, q: query, size });
-        const response = await fetch(`${window.BASE_URL}/elasticsearch/api/search?${params.toString()}`);
+        const response = await fetchEsApi(`/elasticsearch/api/search?${params.toString()}`);
         const data = await response.json();
         if (data.error) {
             statusEl.className = 'small text-danger mt-3';
@@ -284,22 +492,28 @@ async function loadEsDetails() {
         renderHits(data.hits || []);
     });
 
-    document.addEventListener('DOMContentLoaded', async () => {
-        try {
-            const status = await fetch(`${BASE_URL}/elasticsearch/api/status`).then((r) => r.json());
-            renderEsStatus(status);
-            if (status.connected) {
-                await loadEsDetails();
-            } else {
-                setEsLazyMessage('未连接，暂不加载明细');
-                setEsSearchEnabled(false);
-            }
-        } catch (err) {
-            document.getElementById('es-status-body').innerHTML = `<p class="text-danger mb-0">加载失败: ${escapeHtml(String(err))}</p>`;
-            setEsLazyMessage('加载失败');
+    document.addEventListener('DOMContentLoaded', refreshEsPage);
+})();
+
+async function refreshEsPage() {
+    try {
+        await loadEsConnections();
+        const status = await fetchEsJson('/elasticsearch/api/status');
+        esActiveStatus = status.connected ? status : null;
+        const activeId = document.getElementById('es-active-connection').value;
+        renderEsConnections(activeId);
+        renderEsStatus(status);
+        if (status.connected) {
+            await loadEsDetails();
+        } else {
+            setEsLazyMessage('未连接，暂不加载明细');
             setEsSearchEnabled(false);
         }
-    });
-})();
+    } catch (err) {
+        document.getElementById('es-status-body').innerHTML = `<p class="text-danger mb-0">加载失败: ${escapeHtml(String(err))}</p>`;
+        setEsLazyMessage('加载失败');
+        setEsSearchEnabled(false);
+    }
+}
 </script>
 {% endblock %}

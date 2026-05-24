@@ -37,15 +37,25 @@
         <div class="card-header"><i class="bi bi-search"></i> Elasticsearch</div>
         <div class="card-body">
             <div class="row g-3">
-                <div class="col-md-8">
+                <div class="col-md-6">
                     <label class="form-label">连接地址</label>
                     <input type="text" class="form-control" name="es_url"
                            value="{{ config.elasticsearch.url }}" placeholder="http://127.0.0.1:9200">
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-2">
                     <label class="form-label">连接超时（秒）</label>
                     <input type="number" class="form-control" name="es_timeout"
                            value="{{ config.elasticsearch.timeout }}" min="1" max="120">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">账号</label>
+                    <input type="text" class="form-control" name="es_username"
+                           value="{{ config.elasticsearch.username }}" autocomplete="username">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">密码</label>
+                    <input type="password" class="form-control" name="es_password"
+                           placeholder="留空不修改" autocomplete="current-password">
                 </div>
             </div>
         </div>

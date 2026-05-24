@@ -62,7 +62,7 @@ def test_save_config_writes_pretty_utf8_json(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(config, "CONFIG_PATH", cfg_path)
     payload = {
         "zookeeper": {"hosts": "本机:2181", "timeout": 7},
-        "elasticsearch": {"url": "http://127.0.0.1:9200", "timeout": 8},
+        "elasticsearch": {"url": "http://127.0.0.1:9200", "timeout": 8, "username": "elastic", "password": "secret"},
         "file_browser": {"root": ".", "max_preview_bytes": 262144, "enabled": True},
         "refresh_interval": 12,
     }
@@ -70,6 +70,35 @@ def test_save_config_writes_pretty_utf8_json(tmp_path, monkeypatch) -> None:
     config.save_config(payload)
 
     raw = cfg_path.read_bytes()
+    expected = config.normalize_config(payload)
     assert "本机".encode("utf-8") in raw
-    assert raw.decode("utf-8") == json.dumps(payload, indent=2, ensure_ascii=False)
-    assert json.loads(raw.decode("utf-8")) == payload
+    assert raw.decode("utf-8") == json.dumps(expected, indent=2, ensure_ascii=False)
+    assert json.loads(raw.decode("utf-8")) == expected
+
+
+def test_load_config_migrates_legacy_elasticsearch_config(tmp_path, monkeypatch) -> None:
+    cfg_path = tmp_path / "config.json"
+    cfg_path.write_text(
+        json.dumps({
+            "elasticsearch": {
+                "url": "https://es.example.com:9200",
+                "timeout": 8,
+                "username": "elastic",
+                "password": "secret",
+            }
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(config, "CONFIG_PATH", cfg_path)
+
+    loaded = config.load_config()
+
+    assert loaded["elasticsearch"]["active"] == "default"
+    assert loaded["elasticsearch"]["connections"] == [{
+        "id": "default",
+        "name": "默认集群",
+        "url": "https://es.example.com:9200",
+        "timeout": 8,
+        "username": "elastic",
+        "password": "secret",
+    }]
