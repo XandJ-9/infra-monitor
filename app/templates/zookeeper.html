@@ -4,6 +4,48 @@
 {% block content %}
 <h4 class="mb-3"><i class="bi bi-tree"></i> ZooKeeper 监控</h4>
 
+<!-- 连接管理 -->
+<div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>连接管理</span>
+        <button class="btn btn-sm btn-outline-secondary" type="button" onclick="resetZkConnectionForm()">
+            <i class="bi bi-plus-lg"></i> 新增连接
+        </button>
+    </div>
+    <div class="card-body">
+        <div class="row g-3 align-items-end mb-3">
+            <div class="col-md-5">
+                <label class="form-label">当前集群</label>
+                <select class="form-select" id="zk-active-connection" onchange="setActiveZkConnection(this.value)"></select>
+            </div>
+            <div class="col-md-7">
+                <div id="zk-connection-summary" class="text-muted"></div>
+            </div>
+        </div>
+        <form class="row g-2 align-items-end" id="zk-connection-form" onsubmit="saveZkConnection(event)">
+            <input type="hidden" id="zk-connection-id">
+            <div class="col-md-3">
+                <label class="form-label">名称</label>
+                <input type="text" class="form-control" id="zk-connection-name" placeholder="生产集群">
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">连接地址</label>
+                <input type="text" class="form-control" id="zk-connection-hosts" placeholder="zk1:2181,zk2:2181" required>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">超时（秒）</label>
+                <input type="number" class="form-control" id="zk-connection-timeout" min="1" max="120" value="10">
+            </div>
+            <div class="col-md-1 d-grid">
+                <button type="submit" class="btn btn-primary" title="保存">
+                    <i class="bi bi-save"></i>
+                </button>
+            </div>
+        </form>
+        <div id="zk-connections-table" class="table-responsive mt-3"></div>
+    </div>
+</div>
+
 <!-- 状态概览 -->
 <div class="row g-3 mb-3">
     <div class="col-md-6">
@@ -70,6 +112,126 @@
 {% block extra_js %}
 <script>
 const ZK_KEY_PATHS = ['/controller', '/brokers', '/brokers/ids', '/brokers/topics', '/cluster', '/admin', '/config'];
+let zkConnections = [];
+
+async function loadZkConnections() {
+    const data = await fetch(`${BASE_URL}/zookeeper/api/connections`).then((r) => r.json());
+    zkConnections = data.connections || [];
+    renderZkConnections(data.active);
+}
+
+function renderZkConnections(activeId) {
+    const select = document.getElementById('zk-active-connection');
+    select.innerHTML = zkConnections.map((conn) => `
+        <option value="${escapeHtml(conn.id)}" ${conn.id === activeId ? 'selected' : ''}>
+            ${escapeHtml(conn.name)} (${escapeHtml(conn.hosts)})
+        </option>
+    `).join('');
+
+    const active = zkConnections.find((conn) => conn.id === activeId) || zkConnections[0];
+    document.getElementById('zk-connection-summary').innerHTML = active
+        ? `<strong>${escapeHtml(active.name)}</strong> <code>${escapeHtml(active.hosts)}</code>
+           <span class="badge ${active.connected ? 'bg-success' : 'bg-secondary'} ms-2">${active.connected ? '已连接' : '未连接'}</span>`
+        : '<span class="text-danger">暂无连接配置</span>';
+
+    const table = document.getElementById('zk-connections-table');
+    if (!zkConnections.length) {
+        table.innerHTML = '<p class="text-muted mb-0">暂无连接配置</p>';
+        return;
+    }
+    table.innerHTML = `<table class="table table-sm align-middle mb-0">
+        <thead><tr><th>名称</th><th>地址</th><th>超时</th><th>状态</th><th class="text-end">操作</th></tr></thead>
+        <tbody>${zkConnections.map((conn) => `
+            <tr>
+                <td>
+                    ${conn.active ? '<span class="badge bg-primary me-1">当前</span>' : ''}
+                    ${escapeHtml(conn.name)}
+                </td>
+                <td><code>${escapeHtml(conn.hosts)}</code></td>
+                <td>${escapeHtml(String(conn.timeout))}s</td>
+                <td><span class="badge ${conn.connected ? 'bg-success' : 'bg-secondary'}">${conn.connected ? '已连接' : '未连接'}</span></td>
+                <td class="text-end">
+                    <button class="btn btn-sm btn-outline-primary" type="button" title="切换" onclick="setActiveZkConnection('${escapeJs(conn.id)}')" ${conn.active ? 'disabled' : ''}>
+                        <i class="bi bi-check2-circle"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" type="button" title="编辑" onclick="editZkConnection('${escapeJs(conn.id)}')">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" type="button" title="删除" onclick="deleteZkConnection('${escapeJs(conn.id)}')" ${zkConnections.length <= 1 ? 'disabled' : ''}>
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('')}</tbody>
+    </table>`;
+}
+
+function resetZkConnectionForm() {
+    document.getElementById('zk-connection-id').value = '';
+    document.getElementById('zk-connection-name').value = '';
+    document.getElementById('zk-connection-hosts').value = '';
+    document.getElementById('zk-connection-timeout').value = '10';
+    document.getElementById('zk-connection-hosts').focus();
+}
+
+function editZkConnection(id) {
+    const conn = zkConnections.find((item) => item.id === id);
+    if (!conn) return;
+    document.getElementById('zk-connection-id').value = conn.id;
+    document.getElementById('zk-connection-name').value = conn.name || '';
+    document.getElementById('zk-connection-hosts').value = conn.hosts || '';
+    document.getElementById('zk-connection-timeout').value = conn.timeout || 10;
+}
+
+async function saveZkConnection(event) {
+    event.preventDefault();
+    const payload = {
+        id: document.getElementById('zk-connection-id').value.trim(),
+        name: document.getElementById('zk-connection-name').value.trim(),
+        hosts: document.getElementById('zk-connection-hosts').value.trim(),
+        timeout: Number(document.getElementById('zk-connection-timeout').value || 10),
+    };
+    const response = await fetch(`${BASE_URL}/zookeeper/api/connections`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+        const data = await response.json();
+        alert(data.error || '保存失败');
+        return;
+    }
+    resetZkConnectionForm();
+    await refreshZkPage();
+}
+
+async function setActiveZkConnection(id) {
+    if (!id) return;
+    const response = await fetch(`${BASE_URL}/zookeeper/api/connections/active`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+    });
+    if (!response.ok) {
+        const data = await response.json();
+        alert(data.error || '切换失败');
+        return;
+    }
+    await refreshZkPage();
+}
+
+async function deleteZkConnection(id) {
+    if (!confirm('删除这个 ZooKeeper 连接？')) return;
+    const response = await fetch(`${BASE_URL}/zookeeper/api/connections/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+    });
+    if (!response.ok) {
+        const data = await response.json();
+        alert(data.error || '删除失败');
+        return;
+    }
+    await refreshZkPage();
+}
 
 function renderZkStatus(info) {
     const body = document.getElementById('zk-status-body');
@@ -198,19 +360,31 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
+function escapeJs(text) {
+    return String(text).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+async function refreshZkPage() {
     try {
+        await loadZkConnections();
         const status = await fetch(`${BASE_URL}/zookeeper/api/status`).then((r) => r.json());
         renderZkStatus(status);
         if (status.connected) {
             await Promise.all([loadZkKeyNodes(), loadZkServers()]);
+            loadNode(document.getElementById('node-path-input').value.trim() || '/');
         } else {
             setZkLazyMessage('未连接，暂不加载明细');
+            document.getElementById('children-list').innerHTML = '<p class="text-muted">未连接</p>';
+            document.getElementById('node-detail').innerHTML = '<p class="text-muted">未连接</p>';
         }
     } catch (err) {
         document.getElementById('zk-status-body').innerHTML = `<p class="text-danger mb-0">加载失败: ${escapeHtml(String(err))}</p>`;
         setZkLazyMessage('加载失败');
     }
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+    await refreshZkPage();
 });
 </script>
 {% endblock %}

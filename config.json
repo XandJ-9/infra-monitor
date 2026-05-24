@@ -1,7 +1,16 @@
 {
   "zookeeper": {
     "hosts": "127.0.0.1:2181",
-    "timeout": 5
+    "timeout": 5,
+    "active": "default",
+    "connections": [
+      {
+        "id": "default",
+        "name": "默认集群",
+        "hosts": "127.0.0.1:2181",
+        "timeout": 5
+      }
+    ]
   },
   "elasticsearch": {
     "url": "http://127.0.0.1:9200",

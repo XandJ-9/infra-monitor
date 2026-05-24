@@ -108,14 +108,27 @@ async def config_save(request: Request):
 
     # 更新 ZK 配置
     zk_hosts = form.get("zk_hosts", "").strip()
-    if zk_hosts:
-        cfg["zookeeper"]["hosts"] = zk_hosts
     zk_timeout = form.get("zk_timeout", "").strip()
+    zk_timeout_value = None
     if zk_timeout:
         try:
-            cfg["zookeeper"]["timeout"] = int(zk_timeout)
+            zk_timeout_value = int(zk_timeout)
         except ValueError:
             pass
+    if zk_hosts or zk_timeout_value is not None:
+        zk_cfg = cfg.setdefault("zookeeper", {})
+        active = zk_cfg.get("active")
+        for conn in zk_cfg.get("connections", []):
+            if conn.get("id") == active:
+                if zk_hosts:
+                    conn["hosts"] = zk_hosts
+                if zk_timeout_value is not None:
+                    conn["timeout"] = zk_timeout_value
+                break
+        if zk_hosts:
+            zk_cfg["hosts"] = zk_hosts
+        if zk_timeout_value is not None:
+            zk_cfg["timeout"] = zk_timeout_value
 
     # 更新 ES 配置
     es_url = form.get("es_url", "").strip()

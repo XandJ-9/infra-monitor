@@ -23,6 +23,8 @@ def test_load_config_merges_missing_nested_keys(tmp_path, monkeypatch) -> None:
 
     assert loaded["zookeeper"]["hosts"] == "zk.example:2181"
     assert loaded["zookeeper"]["timeout"] == config.DEFAULT_CONFIG["zookeeper"]["timeout"]
+    assert loaded["zookeeper"]["active"] == "default"
+    assert loaded["zookeeper"]["connections"][0]["hosts"] == "zk.example:2181"
     assert loaded["elasticsearch"] == config.DEFAULT_CONFIG["elasticsearch"]
     assert loaded["file_browser"] == config.DEFAULT_CONFIG["file_browser"]
     assert loaded["refresh_interval"] == config.DEFAULT_CONFIG["refresh_interval"]
