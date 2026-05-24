@@ -14,12 +14,9 @@
     </div>
     <div class="card-body">
         <div class="row g-3 align-items-end mb-3">
-            <div class="col-md-5">
+            <div class="col-md-6">
                 <label class="form-label">当前集群</label>
                 <select class="form-select" id="es-active-connection" onchange="setActiveEsConnection(this.value)"></select>
-            </div>
-            <div class="col-md-7">
-                <div id="es-connection-summary" class="text-muted"></div>
             </div>
         </div>
         <form class="row g-2 align-items-end" id="es-connection-form" onsubmit="saveEsConnection(event)">
@@ -168,14 +165,6 @@ function renderEsConnections(activeId) {
             ${escapeHtml(formatEsConnectionOption(conn, activeId))}
         </option>
     `).join('');
-
-    const active = esConnections.find((conn) => conn.id === activeId) || esConnections[0];
-    document.getElementById('es-connection-summary').innerHTML = active
-        ? `<strong>${escapeHtml(active.name)}</strong> <code>${escapeHtml(active.url)}</code>
-           ${active.id === activeId && esActiveStatus?.cluster ? `<span class="badge bg-primary ms-2">${escapeHtml(esActiveStatus.cluster)}</span>` : ''}
-           ${active.username ? `<span class="badge bg-info ms-2">${escapeHtml(active.username)}</span>` : ''}
-           ${active.has_password ? '<span class="badge bg-secondary ms-1">已配置密码</span>' : ''}`
-        : '<span class="text-danger">暂无连接配置</span>';
 
     const table = document.getElementById('es-connections-table');
     if (!esConnections.length) {

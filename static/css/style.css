@@ -12,6 +12,10 @@ body {
 }
 
 /* 导航栏品牌 */
+.app-navbar {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
 .navbar-brand {
     font-weight: 600;
     letter-spacing: 0.5px;

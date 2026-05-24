@@ -18,9 +18,6 @@
                 <label class="form-label">当前集群</label>
                 <select class="form-select" id="zk-active-connection" onchange="setActiveZkConnection(this.value)"></select>
             </div>
-            <div class="col-md-7">
-                <div id="zk-connection-summary" class="text-muted"></div>
-            </div>
         </div>
         <form class="row g-2 align-items-end" id="zk-connection-form" onsubmit="saveZkConnection(event)">
             <input type="hidden" id="zk-connection-id">
@@ -127,12 +124,6 @@ function renderZkConnections(activeId) {
             ${escapeHtml(conn.name)} (${escapeHtml(conn.hosts)})
         </option>
     `).join('');
-
-    const active = zkConnections.find((conn) => conn.id === activeId) || zkConnections[0];
-    document.getElementById('zk-connection-summary').innerHTML = active
-        ? `<strong>${escapeHtml(active.name)}</strong> <code>${escapeHtml(active.hosts)}</code>
-           <span class="badge ${active.connected ? 'bg-success' : 'bg-secondary'} ms-2">${active.connected ? '已连接' : '未连接'}</span>`
-        : '<span class="text-danger">暂无连接配置</span>';
 
     const table = document.getElementById('zk-connections-table');
     if (!zkConnections.length) {
