@@ -149,17 +149,27 @@ function renderKafkaConnections(activeId) {
         return;
     }
     table.innerHTML = `<table class="table table-sm align-middle mb-0">
+        <colgroup>
+            <col class="kafka-col-name">
+            <col class="kafka-col-bootstrap">
+            <col class="kafka-col-protocol">
+            <col class="kafka-col-sasl">
+            <col class="kafka-col-username">
+            <col class="kafka-col-password">
+            <col class="kafka-col-timeout">
+            <col class="kafka-col-actions">
+        </colgroup>
         <thead><tr><th>名称</th><th>Bootstrap Servers</th><th>协议</th><th>SASL</th><th>账号</th><th>密码</th><th>超时</th><th class="text-end">操作</th></tr></thead>
         <tbody>${kafkaConnections.map((conn) => `
             <tr>
-                <td class="kafka-connection-name-cell">
+                <td class="kafka-connection-name-cell" title="${escapeHtml(conn.name || '')}">
                     ${conn.active ? '<span class="badge bg-primary me-1">当前</span>' : ''}
-                    ${escapeHtml(conn.name)}
+                    <span class="kafka-cell-ellipsis">${escapeHtml(conn.name)}</span>
                 </td>
-                <td class="kafka-bootstrap-cell"><code>${escapeHtml(conn.bootstrap_servers)}</code></td>
+                <td class="kafka-bootstrap-cell" title="${escapeHtml(conn.bootstrap_servers || '')}"><code>${escapeHtml(conn.bootstrap_servers)}</code></td>
                 <td>${escapeHtml(conn.security_protocol || 'PLAINTEXT')}</td>
                 <td>${escapeHtml(conn.sasl_mechanism || '-')}</td>
-                <td>${conn.username ? escapeHtml(conn.username) : '<span class="text-muted">-</span>'}</td>
+                <td class="kafka-username-cell" title="${escapeHtml(conn.username || '')}">${conn.username ? `<span class="kafka-cell-ellipsis">${escapeHtml(conn.username)}</span>` : '<span class="text-muted">-</span>'}</td>
                 <td>${conn.has_password ? '<span class="badge bg-secondary">已配置</span>' : '<span class="text-muted">-</span>'}</td>
                 <td>${escapeHtml(String(conn.timeout))}s</td>
                 <td class="text-end kafka-actions-cell">

@@ -149,6 +149,7 @@ RUN_CONNECTION_TESTS=1 uv run pytest -q -m integration
 - 是否没有引入默认测试对外部组件的依赖。
 - 是否补充或更新了必要测试。
 - 是否更新了相关文档索引。
+- 若新增依赖库，是否已按 `doc/development.md` 使用 `uv export` 同步导出到 `requirements.txt`。
 - 是否说明了已运行和未运行的验证命令。
 
 ## 不推荐做法

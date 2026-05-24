@@ -116,17 +116,67 @@ code {
 }
 
 .kafka-connection-table table {
-    min-width: 980px;
+    min-width: 1040px;
+    table-layout: fixed;
 }
 
 .kafka-connection-table th,
 .kafka-connection-table td {
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
 }
 
+.kafka-col-name {
+    width: 150px;
+}
+
+.kafka-col-bootstrap {
+    width: 320px;
+}
+
+.kafka-col-protocol {
+    width: 140px;
+}
+
+.kafka-col-sasl {
+    width: 150px;
+}
+
+.kafka-col-username {
+    width: 140px;
+}
+
+.kafka-col-password {
+    width: 86px;
+}
+
+.kafka-col-timeout {
+    width: 72px;
+}
+
+.kafka-col-actions {
+    width: 130px;
+}
+
 .kafka-bootstrap-cell code {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.kafka-cell-ellipsis {
     display: inline-block;
-    min-width: 260px;
+    max-width: calc(100% - 3.25rem);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: bottom;
+    white-space: nowrap;
+}
+
+.kafka-username-cell .kafka-cell-ellipsis {
+    max-width: 100%;
 }
 
 .kafka-actions-cell {
