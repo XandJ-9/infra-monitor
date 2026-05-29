@@ -112,7 +112,9 @@ code {
 }
 
 .kafka-connection-table {
+    max-height: 260px;
     overflow-x: auto;
+    overflow-y: auto;
 }
 
 .kafka-connection-table table {
@@ -190,6 +192,33 @@ code {
     padding: 0.5rem 0.75rem;
 }
 
+.kafka-list-controls {
+    background: #fff;
+}
+
+.kafka-table-scroll {
+    max-height: 360px;
+    overflow: auto;
+}
+
+.kafka-table-scroll-sm {
+    max-height: 280px;
+}
+
+.kafka-table-scroll thead th,
+.kafka-connection-table thead th,
+.kafka-detail-table thead th {
+    background: #fff;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.kafka-detail-table {
+    max-height: 520px;
+    overflow: auto;
+}
+
 /* 响应式调整 */
 @media (max-width: 768px) {
     .component-card {
@@ -199,5 +228,9 @@ code {
     .kafka-connection-table {
         margin-left: -0.25rem;
         margin-right: -0.25rem;
+    }
+
+    .kafka-table-scroll {
+        max-height: 300px;
     }
 }

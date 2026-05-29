@@ -86,6 +86,30 @@
     </div>
 </div>
 
+<!-- Broker 列表 -->
+<div class="card mb-3">
+    <div class="card-header">
+        <i class="bi bi-hdd-network"></i> Broker 列表
+        <span id="kafka-brokers-count" class="badge bg-secondary ms-2">-</span>
+    </div>
+    <div class="kafka-list-controls border-bottom p-2">
+        <div class="row g-2">
+            <div class="col-md-8">
+                <input type="search" class="form-control form-control-sm" id="kafka-broker-search" placeholder="搜索 Broker ID / Host" oninput="renderKafkaBrokers()">
+            </div>
+            <div class="col-md-4">
+                <select class="form-select form-select-sm" id="kafka-broker-sort" onchange="renderKafkaBrokers()">
+                    <option value="id">按 Broker ID</option>
+                    <option value="host">按 Host</option>
+                </select>
+            </div>
+        </div>
+    </div>
+    <div id="kafka-brokers-body" class="card-body p-0">
+        <p class="text-muted p-3 mb-0">连接状态确认后加载 Broker 信息</p>
+    </div>
+</div>
+
 <!-- 风险诊断 -->
 <div class="card mb-3">
     <div class="card-header d-flex justify-content-between align-items-center">
@@ -100,22 +124,35 @@
     </div>
 </div>
 
-<!-- Broker 列表 -->
-<div class="card mb-3">
-    <div class="card-header">
-        <i class="bi bi-hdd-network"></i> Broker 列表
-        <span id="kafka-brokers-count" class="badge bg-secondary ms-2">-</span>
-    </div>
-    <div id="kafka-brokers-body" class="card-body p-0">
-        <p class="text-muted p-3 mb-0">连接状态确认后加载 Broker 信息</p>
-    </div>
-</div>
-
 <!-- Topic 列表 -->
 <div class="card mb-3">
     <div class="card-header">
         <i class="bi bi-list-columns"></i> Topic 列表
         <span id="kafka-topics-count" class="badge bg-secondary ms-2">-</span>
+    </div>
+    <div class="kafka-list-controls border-bottom p-2">
+        <div class="row g-2">
+            <div class="col-lg-6 col-md-5">
+                <input type="search" class="form-control form-control-sm" id="kafka-topic-search" placeholder="搜索 Topic" oninput="renderKafkaTopics()">
+            </div>
+            <div class="col-lg-3 col-md-4">
+                <select class="form-select form-select-sm" id="kafka-topic-filter" onchange="renderKafkaTopics()">
+                    <option value="all">全部状态</option>
+                    <option value="risky">仅风险 Topic</option>
+                    <option value="offline">Offline Partition</option>
+                    <option value="under_replicated">ISR 不足</option>
+                    <option value="single_replica">单副本</option>
+                </select>
+            </div>
+            <div class="col-lg-3 col-md-3">
+                <select class="form-select form-select-sm" id="kafka-topic-sort" onchange="renderKafkaTopics()">
+                    <option value="risk">风险优先</option>
+                    <option value="name">按名称</option>
+                    <option value="partitions_desc">分区数降序</option>
+                    <option value="replicas_asc">副本数升序</option>
+                </select>
+            </div>
+        </div>
     </div>
     <div id="kafka-topics-body" class="card-body p-0">
         <p class="text-muted p-3 mb-0">连接状态确认后加载 Topic 信息</p>
@@ -128,8 +165,41 @@
         <i class="bi bi-people"></i> Consumer Group 列表
         <span id="kafka-groups-count" class="badge bg-secondary ms-2">-</span>
     </div>
+    <div class="kafka-list-controls border-bottom p-2">
+        <div class="row g-2">
+            <div class="col-lg-6 col-md-5">
+                <input type="search" class="form-control form-control-sm" id="kafka-group-search" placeholder="搜索 Group / Topic" oninput="renderKafkaGroups()">
+            </div>
+            <div class="col-lg-3 col-md-4">
+                <select class="form-select form-select-sm" id="kafka-group-filter" onchange="renderKafkaGroups()">
+                    <option value="all">全部 Group</option>
+                    <option value="lagging">仅有 Lag</option>
+                    <option value="abnormal">异常状态</option>
+                </select>
+            </div>
+            <div class="col-lg-3 col-md-3">
+                <select class="form-select form-select-sm" id="kafka-group-sort" onchange="renderKafkaGroups()">
+                    <option value="lag_desc">Lag 降序</option>
+                    <option value="name">按名称</option>
+                    <option value="members_desc">成员数降序</option>
+                </select>
+            </div>
+        </div>
+    </div>
     <div id="kafka-groups-body" class="card-body p-0">
         <p class="text-muted p-3 mb-0">连接状态确认后加载 Consumer Group 信息</p>
+    </div>
+</div>
+
+<div class="modal fade" id="kafka-detail-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="kafka-detail-title">详情</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body" id="kafka-detail-body"></div>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -138,6 +208,10 @@
 <script>
 let kafkaConnections = [];
 let kafkaActiveStatus = null;
+let kafkaBrokers = [];
+let kafkaTopics = [];
+let kafkaGroups = [];
+const kafkaHealthyGroupStates = new Set(['', 'Stable', 'Empty']);
 
 function escapeJs(text) {
     return String(text).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
@@ -351,7 +425,7 @@ function renderKafkaDiagnostics(data) {
         body.innerHTML = '<p class="text-success mb-0">未发现单副本、ISR 不足、Offline 分区或高 lag 风险。</p>';
         return;
     }
-    body.innerHTML = `<div class="table-responsive">
+    body.innerHTML = `<div class="table-responsive kafka-table-scroll kafka-table-scroll-sm">
         <table class="table table-sm table-hover align-middle mb-0">
             <thead><tr><th>级别</th><th>对象</th><th>风险</th><th>说明</th></tr></thead>
             <tbody>${risks.map((risk) => `
@@ -388,6 +462,96 @@ function renderPartitionSummary(topic) {
     }).join('<br>') + (details.length > 3 ? `<br><span class="text-muted">还有 ${details.length - 3} 个分区</span>` : '');
 }
 
+function normalizedText(value) {
+    return String(value || '').trim().toLowerCase();
+}
+
+function elementValue(id, fallback = '') {
+    return document.getElementById(id)?.value || fallback;
+}
+
+function topicRiskScore(topic) {
+    return (Number(topic.offline_partitions || 0) * 100)
+        + (Number(topic.under_replicated_partitions || 0) * 10)
+        + (Number(topic.replicas || 0) === 1 ? 1 : 0);
+}
+
+function groupStateIsHealthy(group) {
+    return kafkaHealthyGroupStates.has(group.state || '');
+}
+
+function renderKafkaBrokers() {
+    const keyword = normalizedText(elementValue('kafka-broker-search'));
+    const sort = elementValue('kafka-broker-sort', 'id');
+    let rows = kafkaBrokers.filter((broker) => {
+        const haystack = normalizedText(`${broker.broker_id} ${broker.host} ${broker.port} ${broker.rack || ''}`);
+        return !keyword || haystack.includes(keyword);
+    });
+    rows = rows.sort((left, right) => {
+        if (sort === 'host') {
+            return String(left.host || '').localeCompare(String(right.host || ''))
+                || Number(left.broker_id || 0) - Number(right.broker_id || 0);
+        }
+        return Number(left.broker_id || 0) - Number(right.broker_id || 0);
+    });
+    renderKafkaTable('kafka-brokers-body', 'kafka-brokers-count', rows, '暂无 Broker 信息',
+        ['Broker ID', 'Host', 'Port', 'Rack', '操作'],
+        (b) => `<tr><td><span class="badge bg-primary">${escapeHtml(String(b.broker_id))}</span></td><td>${escapeHtml(b.host || '')}</td><td>${escapeHtml(String(b.port || ''))}</td><td>${escapeHtml(b.rack || '-')}</td><td><button class="btn btn-sm btn-outline-secondary" type="button" title="详情" onclick="showBrokerDetail('${escapeJs(b.broker_id)}')"><i class="bi bi-info-circle"></i></button></td></tr>`);
+}
+
+function renderKafkaTopics() {
+    const keyword = normalizedText(elementValue('kafka-topic-search'));
+    const filter = elementValue('kafka-topic-filter', 'all');
+    const sort = elementValue('kafka-topic-sort', 'risk');
+    let rows = kafkaTopics.filter((topic) => {
+        const matchesKeyword = !keyword || normalizedText(topic.name).includes(keyword);
+        if (!matchesKeyword) return false;
+        if (filter === 'risky') return topicRiskScore(topic) > 0;
+        if (filter === 'offline') return Number(topic.offline_partitions || 0) > 0;
+        if (filter === 'under_replicated') return Number(topic.under_replicated_partitions || 0) > 0;
+        if (filter === 'single_replica') return Number(topic.replicas || 0) === 1;
+        return true;
+    });
+    rows = rows.sort((left, right) => {
+        if (sort === 'name') return String(left.name || '').localeCompare(String(right.name || ''));
+        if (sort === 'partitions_desc') return Number(right.partitions || 0) - Number(left.partitions || 0);
+        if (sort === 'replicas_asc') return Number(left.replicas || 0) - Number(right.replicas || 0);
+        return topicRiskScore(right) - topicRiskScore(left)
+            || String(left.name || '').localeCompare(String(right.name || ''));
+    });
+    renderKafkaTable('kafka-topics-body', 'kafka-topics-count', rows, '暂无 Topic 信息',
+        ['名称', '分区数', '副本数', '分区状态', '操作'],
+        (t) => `<tr><td><code>${escapeHtml(t.name || '')}</code>${renderPartitionBadges(t)}</td><td>${escapeHtml(String(t.partitions || 0))}</td><td>${escapeHtml(String(t.replicas || 0))}</td><td>${renderPartitionSummary(t)}</td><td><button class="btn btn-sm btn-outline-secondary" type="button" title="详情" onclick="showTopicDetail('${escapeJs(t.name)}')"><i class="bi bi-list-ul"></i></button></td></tr>`);
+}
+
+function renderKafkaGroups() {
+    const keyword = normalizedText(elementValue('kafka-group-search'));
+    const filter = elementValue('kafka-group-filter', 'all');
+    const sort = elementValue('kafka-group-sort', 'lag_desc');
+    let rows = kafkaGroups.filter((group) => {
+        const haystack = normalizedText(`${group.group_id} ${(group.topics || []).join(' ')}`);
+        const matchesKeyword = !keyword || haystack.includes(keyword);
+        if (!matchesKeyword) return false;
+        if (filter === 'lagging') return Number(group.lag || 0) > 0;
+        if (filter === 'abnormal') return !groupStateIsHealthy(group);
+        return true;
+    });
+    rows = rows.sort((left, right) => {
+        if (sort === 'name') return String(left.group_id || '').localeCompare(String(right.group_id || ''));
+        if (sort === 'members_desc') return Number(right.members || 0) - Number(left.members || 0);
+        return Number(right.lag || 0) - Number(left.lag || 0)
+            || String(left.group_id || '').localeCompare(String(right.group_id || ''));
+    });
+    renderKafkaTable('kafka-groups-body', 'kafka-groups-count', rows, '暂无 Consumer Group 信息',
+        ['Group ID', '状态', '成员数', '订阅 Topic', 'Lag', '操作'],
+        (g) => {
+            const lag = Number(g.lag || 0);
+            const lagHtml = lag > 0 ? `<span class="badge bg-warning">${lag}</span>` : escapeHtml(String(lag));
+            const stateClass = groupStateIsHealthy(g) ? '' : 'text-warning';
+            return `<tr><td><code>${escapeHtml(g.group_id || '')}</code></td><td class="${stateClass}">${escapeHtml(g.state || '-')}</td><td>${escapeHtml(String(g.members || 0))}</td><td>${escapeHtml((g.topics || []).join(', ') || '-')}</td><td>${lagHtml}</td><td><button class="btn btn-sm btn-outline-secondary" type="button" title="详情" onclick="showGroupDetail('${escapeJs(g.group_id)}')"><i class="bi bi-list-ul"></i></button></td></tr>`;
+        });
+}
+
 function renderKafkaTable(bodyId, countId, rows, emptyText, columns, rowRenderer) {
     const body = document.getElementById(bodyId);
     const count = document.getElementById(countId);
@@ -399,10 +563,75 @@ function renderKafkaTable(bodyId, countId, rows, emptyText, columns, rowRenderer
         return;
     }
 
-    body.innerHTML = `<table class="table table-sm table-hover mb-0">
-        <thead><tr>${columns.map((name) => `<th>${name}</th>`).join('')}</tr></thead>
-        <tbody>${rows.map(rowRenderer).join('')}</tbody>
-    </table>`;
+    body.innerHTML = `<div class="table-responsive kafka-table-scroll">
+        <table class="table table-sm table-hover mb-0">
+            <thead><tr>${columns.map((name) => `<th>${name}</th>`).join('')}</tr></thead>
+            <tbody>${rows.map(rowRenderer).join('')}</tbody>
+        </table>
+    </div>`;
+}
+
+function showKafkaDetail(title, bodyHtml) {
+    document.getElementById('kafka-detail-title').textContent = title;
+    document.getElementById('kafka-detail-body').innerHTML = bodyHtml;
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('kafka-detail-modal')).show();
+}
+
+function showBrokerDetail(brokerId) {
+    const broker = kafkaBrokers.find((item) => String(item.broker_id) === String(brokerId));
+    if (!broker) return;
+    showKafkaDetail(`Broker ${broker.broker_id}`, `<dl class="row mb-0">
+        <dt class="col-sm-3">Broker ID</dt><dd class="col-sm-9">${escapeHtml(String(broker.broker_id))}</dd>
+        <dt class="col-sm-3">Host</dt><dd class="col-sm-9">${escapeHtml(broker.host || '-')}</dd>
+        <dt class="col-sm-3">Port</dt><dd class="col-sm-9">${escapeHtml(String(broker.port || '-'))}</dd>
+        <dt class="col-sm-3">Rack</dt><dd class="col-sm-9">${escapeHtml(broker.rack || '-')}</dd>
+    </dl>`);
+}
+
+function showTopicDetail(topicName) {
+    const topic = kafkaTopics.find((item) => item.name === topicName);
+    if (!topic) return;
+    const details = topic.partition_details || [];
+    const rows = details.map((p) => {
+        const badges = [
+            p.offline ? '<span class="badge bg-danger">Offline</span>' : '',
+            p.under_replicated ? '<span class="badge bg-warning text-dark">ISR 不足</span>' : '',
+        ].filter(Boolean).join(' ') || '<span class="badge bg-success">正常</span>';
+        return `<tr><td>${escapeHtml(String(p.partition))}</td><td>${escapeHtml(String(p.leader))}</td><td>${escapeHtml((p.replicas || []).join(', ') || '-')}</td><td>${escapeHtml((p.isr || []).join(', ') || '-')}</td><td>${badges}</td></tr>`;
+    }).join('');
+    showKafkaDetail(`Topic ${topic.name}`, `<div class="mb-3">
+        <span class="badge bg-secondary me-1">分区 ${escapeHtml(String(topic.partitions || 0))}</span>
+        <span class="badge bg-secondary me-1">副本 ${escapeHtml(String(topic.replicas || 0))}</span>
+        ${renderPartitionBadges(topic)}
+    </div>
+    <div class="table-responsive kafka-detail-table">
+        <table class="table table-sm table-hover mb-0">
+            <thead><tr><th>Partition</th><th>Leader</th><th>Replicas</th><th>ISR</th><th>状态</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="5" class="text-muted">暂无分区明细</td></tr>'}</tbody>
+        </table>
+    </div>`);
+}
+
+function showGroupDetail(groupId) {
+    const group = kafkaGroups.find((item) => item.group_id === groupId);
+    if (!group) return;
+    const offsets = group.offsets || [];
+    const rows = offsets.map((item) => {
+        const lag = Number(item.lag || 0);
+        const lagHtml = lag > 0 ? `<span class="badge bg-warning">${lag}</span>` : escapeHtml(String(lag));
+        return `<tr><td><code>${escapeHtml(item.topic || '')}</code></td><td>${escapeHtml(String(item.partition))}</td><td>${escapeHtml(String(item.current_offset))}</td><td>${escapeHtml(String(item.end_offset))}</td><td>${lagHtml}</td></tr>`;
+    }).join('');
+    showKafkaDetail(`Consumer Group ${group.group_id}`, `<div class="mb-3">
+        <span class="badge bg-secondary me-1">状态 ${escapeHtml(group.state || '-')}</span>
+        <span class="badge bg-secondary me-1">成员 ${escapeHtml(String(group.members || 0))}</span>
+        <span class="badge ${Number(group.lag || 0) > 0 ? 'bg-warning text-dark' : 'bg-success'}">Lag ${escapeHtml(String(group.lag || 0))}</span>
+    </div>
+    <div class="table-responsive kafka-detail-table">
+        <table class="table table-sm table-hover mb-0">
+            <thead><tr><th>Topic</th><th>Partition</th><th>Current Offset</th><th>End Offset</th><th>Lag</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="5" class="text-muted">暂无 offset 明细</td></tr>'}</tbody>
+        </table>
+    </div>`);
 }
 
 function setKafkaDetailsMessage(message) {
@@ -428,20 +657,13 @@ async function loadKafkaDetails() {
         fetch(`${BASE_URL}/kafka/api/diagnostics`).then((r) => r.json()),
     ]);
 
+    kafkaBrokers = brokers;
+    kafkaTopics = topics;
+    kafkaGroups = groups;
     renderKafkaDiagnostics(diagnostics);
-    renderKafkaTable('kafka-brokers-body', 'kafka-brokers-count', brokers, '暂无 Broker 信息',
-        ['Broker ID', 'Host', 'Port', 'Rack'],
-        (b) => `<tr><td><span class="badge bg-primary">${escapeHtml(String(b.broker_id))}</span></td><td>${escapeHtml(b.host || '')}</td><td>${escapeHtml(String(b.port || ''))}</td><td>${escapeHtml(b.rack || '-')}</td></tr>`);
-    renderKafkaTable('kafka-topics-body', 'kafka-topics-count', topics, '暂无 Topic 信息',
-        ['名称', '分区数', '副本数', '分区状态'],
-        (t) => `<tr><td><code>${escapeHtml(t.name || '')}</code>${renderPartitionBadges(t)}</td><td>${escapeHtml(String(t.partitions || 0))}</td><td>${escapeHtml(String(t.replicas || 0))}</td><td>${renderPartitionSummary(t)}</td></tr>`);
-    renderKafkaTable('kafka-groups-body', 'kafka-groups-count', groups, '暂无 Consumer Group 信息',
-        ['Group ID', '状态', '成员数', '订阅 Topic', 'Lag'],
-        (g) => {
-            const lag = Number(g.lag || 0);
-            const lagHtml = lag > 0 ? `<span class="badge bg-warning">${lag}</span>` : escapeHtml(String(lag));
-            return `<tr><td><code>${escapeHtml(g.group_id || '')}</code></td><td>${escapeHtml(g.state || '-')}</td><td>${escapeHtml(String(g.members || 0))}</td><td>${escapeHtml((g.topics || []).join(', ') || '-')}</td><td>${lagHtml}</td></tr>`;
-        });
+    renderKafkaBrokers();
+    renderKafkaTopics();
+    renderKafkaGroups();
 }
 
 document.addEventListener('DOMContentLoaded', async () => {

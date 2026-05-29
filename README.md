@@ -6,7 +6,7 @@ Infra Monitor 是一个轻量级基础设施监控面板，用于在内网或本
 
 - 首页仪表盘：汇总各组件连接状态、版本和关键指标
 - ZooKeeper 监控：集群状态、节点树浏览、节点数据查看
-- Kafka 监控：Broker、Topic、Partition、Consumer Group、消费延迟和基础风险诊断
+- Kafka 监控：Broker、Topic、Partition、Consumer Group、消费延迟、基础风险诊断和列表下钻
 - Elasticsearch 监控：集群健康、节点负载、索引列表
 - 在线文件浏览器：只读浏览服务器文件目录，预览文本、代码和图片文件
 - 连接管理：ZooKeeper、Kafka、Elasticsearch 在各自页面内维护连接信息

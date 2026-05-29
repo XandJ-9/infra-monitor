@@ -44,6 +44,18 @@ def test_config_navigation_is_removed() -> None:
     assert 'href="/elasticsearch/config"' not in response.text
 
 
+def test_kafka_page_includes_stage_two_controls() -> None:
+    client = TestClient(app)
+
+    response = client.get("/kafka/")
+
+    assert response.status_code == 200
+    assert 'id="kafka-broker-search"' in response.text
+    assert 'id="kafka-topic-filter"' in response.text
+    assert 'id="kafka-group-sort"' in response.text
+    assert 'id="kafka-detail-modal"' in response.text
+
+
 def test_legacy_elasticsearch_config_redirects_to_elasticsearch_page() -> None:
     client = TestClient(app)
 
