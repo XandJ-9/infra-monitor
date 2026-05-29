@@ -183,6 +183,13 @@ code {
     min-width: 128px;
 }
 
+.kafka-diagnostic-metric {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+}
+
 /* 响应式调整 */
 @media (max-width: 768px) {
     .component-card {

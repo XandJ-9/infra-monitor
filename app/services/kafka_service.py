@@ -25,6 +25,7 @@ class KafkaService:
     _instance: KafkaService | None = None
     admin_client_cls: Any = None
     consumer_cls: Any = None
+    HEALTHY_GROUP_STATES = {"", "Stable", "Empty"}
 
     def __new__(cls) -> KafkaService:
         if cls._instance is None:
@@ -111,6 +112,134 @@ class KafkaService:
         except Exception as exc:
             logger.warning("Kafka AdminClient 获取 Consumer Group 列表失败，尝试 ZK fallback: %s", exc)
             return self._get_consumer_groups_from_zk()
+
+    def get_diagnostics(self, lag_threshold: int = 1000) -> dict[str, Any]:
+        """生成 Kafka 只读风险诊断摘要。"""
+        topics = self.get_topics()
+        groups = self.get_consumer_groups()
+        lag_threshold = max(0, int(lag_threshold or 0))
+
+        risks: list[dict[str, Any]] = []
+        partition_count = sum(topic.partitions for topic in topics)
+        under_replicated_count = sum(topic.under_replicated_partitions for topic in topics)
+        offline_count = sum(topic.offline_partitions for topic in topics)
+        single_replica_topics = [topic for topic in topics if topic.replicas == 1]
+
+        for topic in topics:
+            if topic.offline_partitions > 0:
+                risks.append({
+                    "severity": "critical",
+                    "category": "partition",
+                    "resource": topic.name,
+                    "title": "存在 Offline Partition",
+                    "description": (
+                        f"{topic.name} 有 {topic.offline_partitions} 个分区无可用 leader，"
+                        "生产或消费可能失败。"
+                    ),
+                    "details": {
+                        "offline_partitions": topic.offline_partitions,
+                        "partitions": [
+                            item["partition"]
+                            for item in topic.partition_details
+                            if item.get("offline")
+                        ],
+                    },
+                })
+            if topic.under_replicated_partitions > 0:
+                risks.append({
+                    "severity": "warning",
+                    "category": "replica",
+                    "resource": topic.name,
+                    "title": "ISR 不足",
+                    "description": (
+                        f"{topic.name} 有 {topic.under_replicated_partitions} 个分区副本未完全同步，"
+                        "数据可靠性下降。"
+                    ),
+                    "details": {
+                        "under_replicated_partitions": topic.under_replicated_partitions,
+                        "partitions": [
+                            item["partition"]
+                            for item in topic.partition_details
+                            if item.get("under_replicated")
+                        ],
+                    },
+                })
+            if topic.replicas == 1:
+                risks.append({
+                    "severity": "warning",
+                    "category": "replica",
+                    "resource": topic.name,
+                    "title": "单副本 Topic",
+                    "description": f"{topic.name} 只有 1 个副本，broker 故障时存在数据不可用风险。",
+                    "details": {"replicas": topic.replicas, "partitions": topic.partitions},
+                })
+
+        lagging_groups = []
+        total_lag = 0
+        max_group_lag = 0
+        for group in groups:
+            total_lag += group.lag
+            max_group_lag = max(max_group_lag, group.lag)
+            if group.lag > lag_threshold:
+                lagging_groups.append(group)
+                risks.append({
+                    "severity": "warning",
+                    "category": "lag",
+                    "resource": group.group_id,
+                    "title": "Consumer Group Lag 过高",
+                    "description": (
+                        f"{group.group_id} 当前总 lag 为 {group.lag}，超过阈值 {lag_threshold}。"
+                    ),
+                    "details": {
+                        "lag": group.lag,
+                        "threshold": lag_threshold,
+                        "partitions": [
+                            item for item in group.offsets
+                            if int(item.get("lag", 0) or 0) > 0
+                        ][:20],
+                    },
+                })
+            if group.state not in self.HEALTHY_GROUP_STATES:
+                risks.append({
+                    "severity": "warning",
+                    "category": "consumer_group",
+                    "resource": group.group_id,
+                    "title": "Consumer Group 状态异常",
+                    "description": f"{group.group_id} 当前状态为 {group.state}，可能正在 rebalance 或不可用。",
+                    "details": {"state": group.state, "members": group.members},
+                })
+
+        leader_skew = self._leader_skew(topics)
+        if leader_skew["skewed"]:
+            risks.append({
+                "severity": "info",
+                "category": "broker",
+                "resource": "leader-distribution",
+                "title": "Leader 分布不均",
+                "description": (
+                    f"Broker {leader_skew['max_broker']} 承载 {leader_skew['max_count']} 个 leader，"
+                    f"平均值约 {leader_skew['average']:.1f}。"
+                ),
+                "details": leader_skew,
+            })
+
+        risks.sort(key=lambda item: self._risk_sort_key(item["severity"]))
+        return {
+            "summary": {
+                "topic_count": len(topics),
+                "partition_count": partition_count,
+                "consumer_group_count": len(groups),
+                "offline_partitions": offline_count,
+                "under_replicated_partitions": under_replicated_count,
+                "single_replica_topics": len(single_replica_topics),
+                "lagging_groups": len(lagging_groups),
+                "total_lag": total_lag,
+                "max_group_lag": max_group_lag,
+                "risk_count": len(risks),
+                "lag_threshold": lag_threshold,
+            },
+            "risks": risks,
+        }
 
     def _active_config(self) -> dict[str, Any]:
         cfg = load_config()
@@ -291,6 +420,34 @@ class KafkaService:
 
     def _is_offline(self, partition: dict[str, Any]) -> bool:
         return self._broker_id(partition.get("leader")) < 0
+
+    def _leader_skew(self, topics: list[KafkaTopicInfo]) -> dict[str, Any]:
+        counts: dict[int, int] = {}
+        for topic in topics:
+            for partition in topic.partition_details:
+                leader = int(partition.get("leader", -1))
+                if leader >= 0:
+                    counts[leader] = counts.get(leader, 0) + 1
+        if len(counts) < 2:
+            return {"skewed": False, "leaders": counts}
+
+        total = sum(counts.values())
+        average = total / len(counts)
+        max_broker, max_count = max(counts.items(), key=lambda item: item[1])
+        min_broker, min_count = min(counts.items(), key=lambda item: item[1])
+        skewed = total >= len(counts) * 4 and average > 0 and max_count / average >= 2
+        return {
+            "skewed": skewed,
+            "leaders": counts,
+            "average": average,
+            "max_broker": max_broker,
+            "max_count": max_count,
+            "min_broker": min_broker,
+            "min_count": min_count,
+        }
+
+    def _risk_sort_key(self, severity: str) -> int:
+        return {"critical": 0, "warning": 1, "info": 2}.get(severity, 3)
 
     def _classify_error(self, exc: Exception) -> str:
         name = exc.__class__.__name__

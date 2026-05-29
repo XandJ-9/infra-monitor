@@ -150,6 +150,58 @@ def test_get_consumer_groups_calculates_partition_lag(monkeypatch) -> None:
     ]
 
 
+def test_get_diagnostics_summarizes_kafka_risks(monkeypatch) -> None:
+    service = _service(monkeypatch)
+
+    diagnostics = service.get_diagnostics(lag_threshold=3)
+
+    summary = diagnostics["summary"]
+    assert summary["topic_count"] == 1
+    assert summary["partition_count"] == 3
+    assert summary["offline_partitions"] == 1
+    assert summary["under_replicated_partitions"] == 2
+    assert summary["lagging_groups"] == 1
+    assert summary["total_lag"] == 5
+    assert summary["risk_count"] == 3
+    assert [risk["title"] for risk in diagnostics["risks"]] == [
+        "存在 Offline Partition",
+        "ISR 不足",
+        "Consumer Group Lag 过高",
+    ]
+
+
+def test_kafka_diagnostics_api_uses_lag_threshold(monkeypatch) -> None:
+    calls = []
+
+    def fake_diagnostics(self, lag_threshold=1000):
+        calls.append(lag_threshold)
+        return {
+            "summary": {
+                "topic_count": 0,
+                "partition_count": 0,
+                "consumer_group_count": 0,
+                "offline_partitions": 0,
+                "under_replicated_partitions": 0,
+                "single_replica_topics": 0,
+                "lagging_groups": 0,
+                "total_lag": 0,
+                "max_group_lag": 0,
+                "risk_count": 0,
+                "lag_threshold": lag_threshold,
+            },
+            "risks": [],
+        }
+
+    monkeypatch.setattr(KafkaService, "get_diagnostics", fake_diagnostics)
+    client = TestClient(app)
+
+    response = client.get("/kafka/api/diagnostics?lag_threshold=12")
+
+    assert response.status_code == 200
+    assert calls == [12]
+    assert response.json()["summary"]["lag_threshold"] == 12
+
+
 def test_kafka_connection_crud(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(config, "CONFIG_DB_PATH", tmp_path / "config.sqlite3")
     config.save_config({

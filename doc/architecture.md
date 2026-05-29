@@ -109,6 +109,7 @@ infra-monitor/
 | GET | `/kafka/api/brokers` | Broker 列表 |
 | GET | `/kafka/api/topics` | Topic 列表 |
 | GET | `/kafka/api/consumer-groups` | Consumer Group 列表 |
+| GET | `/kafka/api/diagnostics` | Kafka 风险诊断摘要 |
 
 ### Elasticsearch
 

@@ -86,6 +86,20 @@
     </div>
 </div>
 
+<!-- 风险诊断 -->
+<div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-shield-exclamation"></i> 风险诊断</span>
+        <span id="kafka-diagnostics-count" class="badge bg-secondary">-</span>
+    </div>
+    <div class="card-body">
+        <div id="kafka-diagnostics-summary" class="row g-2 mb-3"></div>
+        <div id="kafka-diagnostics-body">
+            <p class="text-muted mb-0">连接状态确认后加载风险诊断</p>
+        </div>
+    </div>
+</div>
+
 <!-- Broker 列表 -->
 <div class="card mb-3">
     <div class="card-header">
@@ -297,6 +311,61 @@ function renderKafkaStatus(info) {
     body.innerHTML = rows.join('');
 }
 
+function severityBadgeClass(severity) {
+    if (severity === 'critical') return 'bg-danger';
+    if (severity === 'warning') return 'bg-warning text-dark';
+    return 'bg-info text-dark';
+}
+
+function severityText(severity) {
+    if (severity === 'critical') return '严重';
+    if (severity === 'warning') return '警告';
+    return '提示';
+}
+
+function renderKafkaDiagnostics(data) {
+    const summary = data.summary || {};
+    const risks = data.risks || [];
+    const count = document.getElementById('kafka-diagnostics-count');
+    count.className = `badge ${risks.length ? 'bg-warning text-dark' : 'bg-success'}`;
+    count.textContent = risks.length ? `${risks.length} 项风险` : '正常';
+
+    const summaryItems = [
+        ['Offline 分区', summary.offline_partitions || 0],
+        ['URP 分区', summary.under_replicated_partitions || 0],
+        ['单副本 Topic', summary.single_replica_topics || 0],
+        ['Lag Group', summary.lagging_groups || 0],
+        ['Total Lag', summary.total_lag || 0],
+    ];
+    document.getElementById('kafka-diagnostics-summary').innerHTML = summaryItems.map(([label, value]) => `
+        <div class="col-xl col-md-4 col-6">
+            <div class="kafka-diagnostic-metric">
+                <div class="text-muted small">${escapeHtml(label)}</div>
+                <div class="fw-semibold">${escapeHtml(String(value))}</div>
+            </div>
+        </div>
+    `).join('');
+
+    const body = document.getElementById('kafka-diagnostics-body');
+    if (!risks.length) {
+        body.innerHTML = '<p class="text-success mb-0">未发现单副本、ISR 不足、Offline 分区或高 lag 风险。</p>';
+        return;
+    }
+    body.innerHTML = `<div class="table-responsive">
+        <table class="table table-sm table-hover align-middle mb-0">
+            <thead><tr><th>级别</th><th>对象</th><th>风险</th><th>说明</th></tr></thead>
+            <tbody>${risks.map((risk) => `
+                <tr>
+                    <td><span class="badge ${severityBadgeClass(risk.severity)}">${severityText(risk.severity)}</span></td>
+                    <td><code>${escapeHtml(risk.resource || '-')}</code></td>
+                    <td>${escapeHtml(risk.title || '')}</td>
+                    <td>${escapeHtml(risk.description || '')}</td>
+                </tr>
+            `).join('')}</tbody>
+        </table>
+    </div>`;
+}
+
 function renderPartitionBadges(topic) {
     const badges = [];
     if (Number(topic.offline_partitions || 0) > 0) {
@@ -337,6 +406,9 @@ function renderKafkaTable(bodyId, countId, rows, emptyText, columns, rowRenderer
 }
 
 function setKafkaDetailsMessage(message) {
+    document.getElementById('kafka-diagnostics-summary').innerHTML = '';
+    document.getElementById('kafka-diagnostics-body').innerHTML = `<p class="text-muted mb-0">${message}</p>`;
+    document.getElementById('kafka-diagnostics-count').textContent = '-';
     [
         ['kafka-brokers-body', 'kafka-brokers-count'],
         ['kafka-topics-body', 'kafka-topics-count'],
@@ -349,12 +421,14 @@ function setKafkaDetailsMessage(message) {
 
 async function loadKafkaDetails() {
     setKafkaDetailsMessage('正在加载明细...');
-    const [brokers, topics, groups] = await Promise.all([
+    const [brokers, topics, groups, diagnostics] = await Promise.all([
         fetch(`${BASE_URL}/kafka/api/brokers`).then((r) => r.json()),
         fetch(`${BASE_URL}/kafka/api/topics`).then((r) => r.json()),
         fetch(`${BASE_URL}/kafka/api/consumer-groups`).then((r) => r.json()),
+        fetch(`${BASE_URL}/kafka/api/diagnostics`).then((r) => r.json()),
     ]);
 
+    renderKafkaDiagnostics(diagnostics);
     renderKafkaTable('kafka-brokers-body', 'kafka-brokers-count', brokers, '暂无 Broker 信息',
         ['Broker ID', 'Host', 'Port', 'Rack'],
         (b) => `<tr><td><span class="badge bg-primary">${escapeHtml(String(b.broker_id))}</span></td><td>${escapeHtml(b.host || '')}</td><td>${escapeHtml(String(b.port || ''))}</td><td>${escapeHtml(b.rack || '-')}</td></tr>`);

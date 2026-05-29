@@ -6,7 +6,7 @@ Kafka 监控路由
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.config import load_config, normalize_config, save_config
@@ -212,3 +212,29 @@ async def kafka_consumer_groups():
     groups = await sync_with_timeout(kafka.get_consumer_groups, fallback=[])
     return [{"group_id": g.group_id, "state": g.state, "members": g.members,
              "topics": g.topics, "lag": g.lag, "offsets": g.offsets} for g in groups]
+
+
+@router.get("/api/diagnostics")
+async def kafka_diagnostics(lag_threshold: int = Query(1000, ge=0, le=1_000_000_000)):
+    """API：获取 Kafka 风险诊断摘要"""
+    kafka = KafkaService()
+    fallback = {
+        "summary": {
+            "topic_count": 0,
+            "partition_count": 0,
+            "consumer_group_count": 0,
+            "offline_partitions": 0,
+            "under_replicated_partitions": 0,
+            "single_replica_topics": 0,
+            "lagging_groups": 0,
+            "total_lag": 0,
+            "max_group_lag": 0,
+            "risk_count": 0,
+            "lag_threshold": lag_threshold,
+        },
+        "risks": [],
+    }
+    return await sync_with_timeout(
+        lambda: kafka.get_diagnostics(lag_threshold=lag_threshold),
+        fallback=fallback,
+    )
